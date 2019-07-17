@@ -346,7 +346,7 @@ class hires_fitter:
         gc.collect()
     
 #Routines to analyse the output and give meaningful names to the parameters,
-#not in the class file, can be used without instantiating the class
+#not in the class,  can be used without instantiating the class
 def pc_analyzer(filesbasename, return_sorted=True):
 
    fstats = filesbasename+'.stats'
@@ -376,13 +376,13 @@ def pc_analyzer(filesbasename, return_sorted=True):
       for ii in range(len(postsamples[:,0])):
          if startind>0:
             postsorted[ii,0] = postsamples[ii,0]
-            zsort = np.argsort(postsamples[ii,startind+1::3])
-            for jj in range(len(zsort)):
+         zsort = np.argsort(postsamples[ii,startind+1::3])
+         for jj in range(len(zsort)):
                 postsorted[ii,3*jj+startind:3*jj+3+startind] = postsamples[ii,3*zsort[jj]+[0,1,2]+startind]
             
       return lnz, lnz_err, lhoodsamples, postsorted
    else:
-      return lnz, lnz_err, lhoodsamples, postdsamples
+      return lnz, lnz_err, lhoodsamples, postsamples
    
 def get_parnames(ncomp, cont=False):
     

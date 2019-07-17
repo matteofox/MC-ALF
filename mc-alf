@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
-
+from __future__ import print_function
 import numpy as np
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
-import glob, os, shutil, socket, warnings
+import glob, os, shutil, warnings
 import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
@@ -20,6 +20,13 @@ args = parser.parse_args()
 
 configpars = fitter.readconfig(args.config)
 
+#Create directories if necessary
+if not os.path.isdir(configpars['chaindir']):
+   os.makedirs(configpars['chaindir'])
+if not os.path.isdir(configpars['plotdir']):
+   os.makedirs(configpars['plotdir'])
+   
+
 if configpars['dofit']:
 
     for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
@@ -29,7 +36,6 @@ if configpars['dofit']:
 
            settings = PolyChordSettings(temp.ndim, 0)
            settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])
-	   print configpars['chaindir']
            settings.base_dir = configpars['chaindir']
            
 	   if 'pcsettings' in configpars:
@@ -53,7 +59,7 @@ if configpars['dofit']:
            t0 = datetime.datetime.now()
            output = pypolychord.run_polychord(temp.lnlhood, temp.ndim, 0, settings, temp._scale_cube)
            t1 = datetime.datetime.now()
-           print 'Execution time {}'.format(t1-t0)
+           print('Execution time {}'.format(t1-t0))
 
 
 if configpars['doplot']:
@@ -62,7 +68,7 @@ if configpars['doplot']:
         Ncomp_existing = []
         AIC_existing = []
         
-        print 'Analyzing run: '+configpars['chainfmt'].format('','')
+        print('Analyzing run: '+configpars['chainfmt'].format('',''))
         plotrange= np.arange(1,50)
         
         for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
@@ -81,8 +87,8 @@ if configpars['doplot']:
               if temp.contval<0:
                  continuum = meds[0]
               else:
-                 continuum = temp.contval   
-              
+                 continuum = temp.contval 
+                            
               #Calc median likelihood across posterior
               lnlhood = np.percentile(lhoodval, 50)
               AIC = 2*temp.ndim-2*lnlhood
@@ -90,7 +96,7 @@ if configpars['doplot']:
               AIC_existing.append(AIC)
               Ncomp_existing.append(comp)
               
-              print '{0:02}+{1:02} Components model: NS Ln(z): {2:6.3f}, Ln(L): {3:6.3f}, AIC: {4:6.3f}'.format(comp, temp.nfill, lnz, lnlhood, AIC)
+              print('{0:02}+{1:02} Components model: NS Ln(z): {2:6.3f}, Ln(L): {3:6.3f}, AIC: {4:6.3f}'.format(comp, temp.nfill, lnz, lnlhood, AIC))
                               
               if comp in plotrange:
                  figsize = (9*temp.numlines,5)
@@ -142,4 +148,4 @@ if configpars['doplot']:
         for jj in range(okmodels.sum()):
             okstr += '{} '.format(Ncomp_existing[okmodels][jj])
                     
-        print 'Models to be considered for the analysis: '+okstr
+        print('Models to be considered for the analysis: '+okstr)
