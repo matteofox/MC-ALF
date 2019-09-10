@@ -32,7 +32,9 @@ if configpars['dofit']:
     for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
         
         with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
-	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval']) as temp:
+	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
+				 Nrange=configpars['Nrange'], brange=configpars['brange'], Nrangefill=configpars['Nrangefill'], \
+				 brangefill=configpars['brangefill']) as temp:
 
            settings = PolyChordSettings(temp.ndim, 0)
            settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])

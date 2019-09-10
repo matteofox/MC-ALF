@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 
 class hires_fitter:
 
-    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=1.0, coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
+    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=1.0, Nrange=[11.5,16], brange=[1,30], Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
         
 	""" Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
@@ -91,9 +91,14 @@ class hires_fitter:
         
         #set up parameter limits
         self.cont_lims = np.array((0.9,1.1))
-        self.N_lims = np.array((11.5,16))
+        
+	self.N_lims = np.array(Nrange)
+        self.N_lims_fill = np.array(brange)
+	
+	self.b_lims = np.array(Nrangefill)
+	self.b_lims_fill = np.array(brangefill)
+	
 	self.z_lims = np.array((self.zmin, self.zmax))
-        self.b_lims = np.array((1,30))
         self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
      
         #Define start and ending indices for lines of interest
@@ -113,9 +118,9 @@ class hires_fitter:
 	  self.bounds.append(self.z_lims)
 	  self.bounds.append(self.b_lims)
         for ii in range(self.nfill):
-	  self.bounds.append(self.N_lims)
+	  self.bounds.append(self.N_lims_fill)
 	  self.bounds.append(self.z_lims_fill)
-	  self.bounds.append(self.b_lims)
+	  self.bounds.append(self.b_lims_fill)
           
         self.ndim = len(self.bounds)  
 	  	  
@@ -474,6 +479,27 @@ def readconfig(configfile=None, logger=None):
        contval = int(input_params.get('components', 'contval'))
     else:
        contval = 1
+       
+    if input_params.has_option('components', 'Nrange'):
+       Nrange = np.array(input_params.get('components', 'Nrange').split(','), dtype=float)
+    else:
+       Nrange = np.array((11.5,16))
+
+    if input_params.has_option('components', 'brange'):
+       brange = np.array(input_params.get('components', 'brange').split(','), dtype=float)
+    else:
+       brange = np.array((1,30))
+
+    if input_params.has_option('components', 'Nrangefill'):
+       Nrangefill = np.array(input_params.get('components', 'Nrangefill').split(','), dtype=float)
+    else:
+       Nrangefill = np.array((11.5,16))
+
+    if input_params.has_option('components', 'brangefill'):
+       brangefill = np.array(input_params.get('components', 'brangefill').split(','), dtype=float)
+    else:
+       brangefill = np.array((1,30))
+       
     
     #Parameters driving the run
     if input_params.has_option('run', 'dofit'):
@@ -486,18 +512,22 @@ def readconfig(configfile=None, logger=None):
     else:
        doplot = True
 
-    run_params = {'specfile': datadir+input_params.get('input', 'specfile'),
-                  'wavefit' : wavefit,
-                  'linelist': linelist,
-		  'coldef'  : coldef,
-		  'chaindir': chaindir,
-		  'plotdir' : plotdir,
-		  'chainfmt': chainfmt,
-		  'ncomp'   : ncomp,
-		  'nfill'   : nfill,
-		  'contval' : contval,
-		  'dofit'   : dofit,
-		  'doplot'  : doplot}
+    run_params = {'specfile'  : datadir+input_params.get('input', 'specfile'),
+                  'wavefit'   : wavefit,
+                  'linelist'  : linelist,
+		  'coldef'    : coldef,
+		  'chaindir'  : chaindir,
+		  'plotdir'   : plotdir,
+		  'chainfmt'  : chainfmt,
+		  'ncomp'     : ncomp,
+		  'nfill'     : nfill,
+		  'Nrange'    : Nrange,
+		  'brange'    : brange,
+		  'Nrangefill': Nrangefill,
+		  'brangefill': brangefill,
+		  'contval'   : contval,
+		  'dofit'     : dofit,
+		  'doplot'    : doplot}
 		  
     if input_params.has_section('pcsettings'):
     
