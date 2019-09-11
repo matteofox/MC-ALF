@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 
 class hires_fitter:
 
-    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=1.0, Nrange=[11.5,16], brange=[1,30], Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
+    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=1.0, Nrange=[11.5,16], brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
         
 	""" Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
@@ -98,8 +98,14 @@ class hires_fitter:
 	self.b_lims = np.array(Nrangefill)
 	self.b_lims_fill = np.array(brangefill)
 	
-	self.z_lims = np.array((self.zmin, self.zmax))
-        self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
+	if zrange is not None:
+	  print('zrange user limits')
+	  self.z_lims = zrange
+        else:
+	  print('zrange auto limits')
+	  self.z_lims = np.array((self.zmin, self.zmax))
+	
+	self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
      
         #Define start and ending indices for lines of interest
         if self.freecont:
@@ -490,6 +496,11 @@ def readconfig(configfile=None, logger=None):
     else:
        brange = np.array((1,30))
 
+    if input_params.has_option('components', 'zrange'):
+       zrange = np.array(input_params.get('components', 'zrange').split(','), dtype=float)
+    else:
+       zrange = None
+
     if input_params.has_option('components', 'Nrangefill'):
        Nrangefill = np.array(input_params.get('components', 'Nrangefill').split(','), dtype=float)
     else:
@@ -523,6 +534,7 @@ def readconfig(configfile=None, logger=None):
 		  'nfill'     : nfill,
 		  'Nrange'    : Nrange,
 		  'brange'    : brange,
+		  'zrange'    : zrange,
 		  'Nrangefill': Nrangefill,
 		  'brangefill': brangefill,
 		  'contval'   : contval,
