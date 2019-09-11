@@ -99,10 +99,8 @@ class hires_fitter:
 	self.b_lims_fill = np.array(brangefill)
 	
 	if zrange is not None:
-	  print('zrange user limits')
 	  self.z_lims = zrange
         else:
-	  print('zrange auto limits')
 	  self.z_lims = np.array((self.zmin, self.zmax))
 	
 	self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
