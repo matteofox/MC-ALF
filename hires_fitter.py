@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 
 class hires_fitter:
 
-    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=1.0, Nrange=[11.5,16], brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
+    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=[1.0], Nrange=[11.5,16], brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
         
 	""" Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
@@ -33,7 +33,7 @@ class hires_fitter:
 	self.contval = contval
 	self.ncomp = ncomp
         self.nfill = nfill
-        if contval<0:
+        if len(contval)>1:
            self.freecont = True
         else:
            self.freecont = False
@@ -90,7 +90,7 @@ class hires_fitter:
 	self.zmax_fill = ((np.max(obj_wl)-0.25)/self.linefill['wrest'].value)-1.
         
         #set up parameter limits
-        self.cont_lims = np.array((0.9,1.1))
+        self.cont_lims = np.array(contval)
         
 	self.N_lims = np.array(Nrange)
         self.N_lims_fill = np.array(brange)
@@ -127,7 +127,7 @@ class hires_fitter:
 	  self.bounds.append(self.b_lims_fill)
           
         self.ndim = len(self.bounds)  
-	  	  
+        	  	  
     def _scale_cube(self, cube):
         
 	cube2 = np.copy(cube)
@@ -480,9 +480,9 @@ def readconfig(configfile=None, logger=None):
        nfill = 0
 
     if input_params.has_option('components', 'contval'):
-       contval = int(input_params.get('components', 'contval'))
+       contval =  np.array(input_params.get('components', 'contval').split(','), dtype=float)
     else:
-       contval = 1
+       contval = np.array((1))
        
     if input_params.has_option('components', 'Nrange'):
        Nrange = np.array(input_params.get('components', 'Nrange').split(','), dtype=float)

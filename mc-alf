@@ -89,7 +89,7 @@ if configpars['doplot']:
               meds = np.percentile(values, 50, axis=0) 
               percs = np.transpose(np.percentile(values, [16,50,84], axis=0))
         
-              if temp.contval<0:
+              if len(temp.contval)>1:
                  continuum = meds[0]
               else:
                  continuum = temp.contval 
