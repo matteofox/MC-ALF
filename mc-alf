@@ -11,6 +11,7 @@ import matplotlib.pyplot as pl
 import pypolychord
 from pypolychord.settings import PolyChordSettings
 import hires_fitter as fitter
+from mpi4py import MPI
 
 pl.rc('text', usetex=True)
 
@@ -25,7 +26,6 @@ if not os.path.isdir(configpars['chaindir']):
    os.makedirs(configpars['chaindir'])
 if not os.path.isdir(configpars['plotdir']):
    os.makedirs(configpars['plotdir'])
-   
 
 if configpars['dofit']:
 
@@ -59,13 +59,17 @@ if configpars['dofit']:
            #| Run PolyChord
            
            t0 = datetime.datetime.now()
-           output = pypolychord.run_polychord(temp.lnlhood, temp.ndim, 0, settings, temp._scale_cube)
+	   output = pypolychord.run_polychord(temp.lnlhood, temp.ndim, 0, settings, temp._scale_cube)
            t1 = datetime.datetime.now()
-           print('Execution time {}'.format(t1-t0))
+	   if MPI.COMM_WORLD.rank==0:
+	      print('Execution time {}'.format(t1-t0))
 
 
 if configpars['doplot']:
-                        
+     
+     #This can only be one on one core....
+                             
+     if MPI.COMM_WORLD.rank==0:
         #First evaluate evidence as a function of number of components
         Ncomp_existing = []
         AIC_existing = []
