@@ -51,7 +51,8 @@ class hires_fitter:
 
         #Select the spectral range to be used 
         okrange = np.zeros_like(obj_wl, dtype=bool)	
-        for i in range(len(self.fitrange)):
+        self.numfitranges = len(self.fitrange)
+	for i in range(self.numfitranges):
            okrange[(obj_wl>self.fitrange[i][0]) & (obj_wl<self.fitrange[i][1])] = True
 	
 	self.obj = obj[okrange]
@@ -509,6 +510,10 @@ def readconfig(configfile=None, logger=None):
     else:
        brangefill = np.array((1,30))
        
+    if input_params.has_option('plots', 'nmaxcols'):
+       nmaxcols = int(input_params.get('plots', 'nmaxcols')[0])
+    else:
+       nmaxcols = 5
     
     #Parameters driving the run
     if input_params.has_option('run', 'dofit'):
@@ -536,6 +541,7 @@ def readconfig(configfile=None, logger=None):
 		  'Nrangefill': Nrangefill,
 		  'brangefill': brangefill,
 		  'contval'   : contval,
+		  'nmaxcols'  : nmaxcols,
 		  'dofit'     : dofit,
 		  'doplot'    : doplot}
 		  

@@ -108,23 +108,39 @@ if configpars['doplot']:
               print('{0:02}+{1:02} Components model: NS Ln(z): {2:6.3f}, Ln(L): {3:6.3f}, AIC: {4:6.3f}'.format(comp, temp.nfill, lnz, lnlhood, AIC))
                               
               if comp in plotrange:
-                 figsize = (9*temp.numlines,5)
-                 fig, ax = pl.subplots(nrows=1, ncols=temp.numlines, sharey=True, figsize=figsize, squeeze=False)
+	         
+		 nrows = (temp.numfitranges / configpars['nmaxcols'] )
+		 if temp.numfitranges % configpars['nmaxcols'] > 0:
+		    nrows += 1
+		    
+		 if nrows == 1:
+		    ncols = temp.numfitranges
+		 else:
+		    ncols = configpars['nmaxcols']   
+		 		 
+                 figsize = (10*ncols,5*nrows)
+                 fig, ax = pl.subplots(nrows=nrows, ncols=ncols, sharey=True, figsize=figsize, squeeze=False)
                  
-                 nsamp = 100
-                 rsamples = np.random.randint(values.shape[0], size=nsamp)
-
-                 for lineset in range(temp.numlines):
-              
-                   ax[0,lineset].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
-                   ax[0,lineset].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
-                   ax[0,lineset].set_xlim(configpars['wavefit'][lineset])
+		 nsamp = min([len(values),100])
+                 if nsamp< 100:
+		    rsamples = np.arange(nsamp)
+		 else:
+		    rsamples = np.random.randint(values.shape[0], size=nsamp)
+		 
+                 for waverange in range(temp.numfitranges):
+                   
+		   colind = waverange % configpars['nmaxcols'] 
+		   rowind = waverange / configpars['nmaxcols'] 
+		   
+                   ax[rowind,colind].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
+                   ax[rowind,colind].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
+                   ax[rowind,colind].set_xlim(configpars['wavefit'][waverange])
                            
                    for ii in rsamples:
                        tsamp = values[ii,:]
                        tspec = temp.reconstruct_spec(tsamp)
                        
-                       ax[0,lineset].plot(temp.obj_wl, tspec, color='red', alpha=0.1, lw=0.3, rasterized=True)
+                       ax[rowind,colind].plot(temp.obj_wl, tspec, color='red', alpha=1-8E-3*nsamp, lw=2-1.7E-2*nsamp, rasterized=False)
 
                    for i in range(temp.ncomp+temp.nfill):
                        
@@ -137,11 +153,13 @@ if configpars['doplot']:
                           color = 'salmon' 
                           spec1 = temp.reconstruct_onecomp_fill(continuum, _N, _z, _b)  
                        
-                       ax[0,lineset].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
+                       ax[rowind,colind].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
                        
-                       #Plot ticks at component positions
-                       wave = temp.linepars[lineset]['wrest'].value*(1+_z)
-                       ax[0,lineset].plot([wave, wave], [1.06, 1.10], color='red')
+                       #Plot ticks at component positions, needs to be done for all 
+		       #transitions in the plotted range
+                       for trans in range(temp.numlines):
+		         wave = temp.linepars[trans]['wrest'].value*(1+_z)
+                         ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='red')
         
                  fig.tight_layout()
                  #pl.show()
