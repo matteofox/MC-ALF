@@ -69,8 +69,13 @@ if __name__ == "__main__":
     scripts = ['scripts/'+file for file in os.listdir('scripts/')]  
 
     cmdclass = {'clean': CleanCommand}
-
-  
+    
+    try:
+      import pypolychord
+    except:
+      print("Python bindings for PolyChordLite must be installed before mc-alf can be installed.")  
+      exit()
+      
     with open('routines/_version.py') as f:
         exec(f.read())
 
@@ -90,8 +95,7 @@ if __name__ == "__main__":
 	  'scipy',
 	  'matplotlib',
 	  'mpi4py',
-	  'linetools',
-	  'pypolychord'],
+	  'linetools'],
         package_data={"": ["README.md", "LICENSE"]},
         include_package_data=True,
         zip_safe=False,
