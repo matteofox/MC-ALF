@@ -10,8 +10,8 @@ import argparse, datetime
 import matplotlib.pyplot as pl
 import pypolychord
 from pypolychord.settings import PolyChordSettings
-import hires_fitter as fitter
 from mpi4py import MPI
+from routines import hires_fitter as fitter
 
 pl.rc('text', usetex=True)
 
