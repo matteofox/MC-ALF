@@ -443,6 +443,11 @@ def readconfig(configfile=None, logger=None):
     else:
         coldef = input_params.get('input', 'coldef').split(',')	
     
+    if not input_params.has_option('input', 'specres'):
+        specres = 7.0
+    else:
+        specres = float(input_params.get('input', 'specres')[0])	
+    
     #Paths are desirable but not essential, default to cwd
     if not input_params.has_option('pathing', 'datadir'):
        datadir = './'
@@ -530,6 +535,7 @@ def readconfig(configfile=None, logger=None):
                   'wavefit'   : wavefit,
                   'linelist'  : linelist,
 		  'coldef'    : coldef,
+		  'specres'   : specres,
 		  'chaindir'  : chaindir,
 		  'plotdir'   : plotdir,
 		  'chainfmt'  : chainfmt,
