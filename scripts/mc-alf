@@ -22,9 +22,10 @@ args = parser.parse_args()
 configpars = fitter.readconfig(args.config)
 
 #Create directories if necessary
-if not os.path.isdir(configpars['chaindir']):
+if MPI.COMM_WORLD.rank==0:
+ if not os.path.isdir(configpars['chaindir']):
    os.makedirs(configpars['chaindir'])
-if not os.path.isdir(configpars['plotdir']):
+ if not os.path.isdir(configpars['plotdir']):
    os.makedirs(configpars['plotdir'])
 
 if configpars['dofit']:
