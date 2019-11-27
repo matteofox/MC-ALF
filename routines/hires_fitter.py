@@ -94,9 +94,9 @@ class hires_fitter:
         self.cont_lims = np.array(contval)
         
 	self.N_lims = np.array(Nrange)
-        self.N_lims_fill = np.array(brange)
+        self.N_lims_fill = np.array(Nrangefill)
 	
-	self.b_lims = np.array(Nrangefill)
+	self.b_lims = np.array(brange)
 	self.b_lims_fill = np.array(brangefill)
 	
 	if zrange is not None:
