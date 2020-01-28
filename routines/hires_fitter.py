@@ -134,7 +134,8 @@ class hires_fitter:
 	cube2 = np.copy(cube)
         for ii in range(len(cube)):
             cube2[ii] = cube2[ii]*self.bounds[ii].ptp() + np.min(self.bounds[ii])
-
+        
+       
         return cube2
 
     def lnprior(self, p):
@@ -171,7 +172,12 @@ class hires_fitter:
         return chi2
          
     def lnlhood(self, p):
+
+        zind = (1+self.startind)+np.arange(self.ncomp)*3
         
+        if not all(p[zind] == np.sort(p[zind])):
+          return -np.inf, []
+
 	#reconstruct the spectrum first    
 		
 	model_spec = self.reconstruct_spec(p)
