@@ -8,12 +8,8 @@ import glob, os, shutil, warnings
 import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
-import pypolychord
-from pypolychord.settings import PolyChordSettings
 from mpi4py import MPI
 from routines import hires_fitter as fitter
-import pymultinest
-
 
 pl.rc('text', usetex=True)
 
@@ -40,34 +36,85 @@ if configpars['dofit']:
 				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
                                  brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike']) as temp:
 
-           settings = PolyChordSettings(temp.ndim, 0)
-           settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])
-           settings.base_dir = configpars['chaindir']
+           if configpars['solver'] == 'polychord':
+              
+              import pypolychord
+              from pypolychord.settings import PolyChordSettings
+              
+              settings = PolyChordSettings(temp.ndim, 0)
+              settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])
+              settings.base_dir = configpars['chaindir']
            
-	   if 'pcsettings' in configpars:
-	      configsettings = configpars['pcsettings']
-	      settings.nlive         = int(configsettings['nlive'])
-              settings.num_repeats   = int(configsettings['num_repeats'])
-              settings.precision_criterion = float(configsettings['precision_criterion'])
-              settings.feedback      = int(configsettings['feedback'])
-              settings.do_clustering = configsettings['do_clustering']
-              settings.equals        = configsettings['equals']
-              settings.read_resume   = configsettings['read_resume']
-              settings.write_resume  = configsettings['write_resume']
-              settings.write_live    = configsettings['write_live']
-              settings.write_dead    = configsettings['write_dead']
-              settings.write_prior   = configsettings['write_prior']
-              settings.posteriors    = configsettings['posteriors']
-              settings.cluster_posteriors = configsettings['cluster_posteriors']
+	      if 'pcsettings' in configpars:
+	         configsettings = configpars['pcsettings']
+	         settings.nlive         = int(configsettings['nlive'])
+                 settings.num_repeats   = int(configsettings['num_repeats'])
+                 settings.precision_criterion = float(configsettings['precision_criterion'])
+                 settings.feedback      = int(configsettings['feedback'])
+                 settings.do_clustering = configsettings['do_clustering']
+                 settings.equals        = configsettings['equals']
+                 settings.read_resume   = configsettings['read_resume']
+                 settings.write_resume  = configsettings['write_resume']
+                 settings.write_live    = configsettings['write_live']
+                 settings.write_dead    = configsettings['write_dead']
+                 settings.write_prior   = configsettings['write_prior']
+                 settings.posteriors    = configsettings['posteriors']
+                 settings.cluster_posteriors = configsettings['cluster_posteriors']
 	   
-           #| Run PolyChord
+              #| Run PolyChord
            
-           t0 = datetime.datetime.now()
-	   output = pypolychord.run_polychord(temp.lnlhood, temp.ndim, 0, settings, temp._scale_cube)
-           t1 = datetime.datetime.now()
-	   if MPI.COMM_WORLD.rank==0:
-	      print('Execution time {}'.format(t1-t0))
+              t0 = datetime.datetime.now()
+	      output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+              t1 = datetime.datetime.now()
+	      if MPI.COMM_WORLD.rank==0:
+	         print('Execution time {}'.format(t1-t0))
+            
+           elif configpars['solver'] == 'multinest':
+              
+              import pymultinest
+              
+              out_fmt = configpars['chaindir']+'/'+configpars['chainfmt'].format(comp, configpars['nfill'])
+	      
+              if 'mnsettings' in configpars:
+	         configsettings = configpars['mnsettings']
+                 if 'nlive' in configsettings:
+                    nlive = int(configsettings['nlive'])
+                 else:
+                    nlive = 1000   
+                 if 'samplingeff' in configsettings:
+                    samplingeff = float(configsettings['samplingeff'])
+                 else:
+                    samplingeff = 0.3  
+              
+              t0 = datetime.datetime.now()
+              pymultinest.run(temp.lnlhood_mn, temp._scale_cube_mn, temp.ndim, sampling_efficiency=samplingeff, resume=False, \
+                   outputfiles_basename=out_fmt, verbose=True, multimodal=False, \
+                   importance_nested_sampling=False, n_live_points=nlive, n_iter_before_update=100, \
+                   evidence_tolerance=0.1)
+              t1 = datetime.datetime.now()
+	      if MPI.COMM_WORLD.rank==0:
+	         print('Execution time {}'.format(t1-t0))
+           
+           elif configpars['solver'] == 'dynesty':
+               
+               import dynesty
+               
+               out_fmt = configpars['chaindir']+'/'+configpars['chainfmt'].format(comp, configpars['nfill'])
+               
+               dsampler = dynesty.DynamicNestedSampler(temp.lnlhood_dy, temp._scale_cube_pc, temp.ndim, bound='none', method='unif')
+               dsampler.run_nested()
+               dresults = dsampler.results
+               
+               samples = dresults.samples  # samples
+               weights = np.exp(dresults.logwt - dresults.logz[-1])  # normalized weights
 
+               # Resample weighted samples.
+               samples_equal = dyfunc.resample_equal(samples, weights)
+               
+               np.savetxt(out_fmt+'equal_weights.txt', samples_equal)               
+               
+           else:
+                 print('Requested solver {} not implemented'.format(solver))
 
 if configpars['doplot']:
      

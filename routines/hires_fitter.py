@@ -137,7 +137,7 @@ class hires_fitter:
           
         self.ndim = len(self.bounds)  
         	  	  
-    def _scale_cube(self, cube):
+    def _scale_cube_pc(self, cube):
         
 	cube2 = np.copy(cube)
         for ii in range(len(cube)):
@@ -146,6 +146,13 @@ class hires_fitter:
        
         return cube2
 
+    def _scale_cube_mn(self, cube, ndim, nparam):
+        
+        for ii in range(ndim):
+            cube[ii] = cube[ii]*self.bounds[ii].ptp() + np.min(self.bounds[ii])
+        
+        return cube
+        
     def lnprior(self, p):
         
         ndim = len(p)
@@ -179,14 +186,41 @@ class hires_fitter:
     
         return chi2
          
-    def lnlhood(self, p):
-
+    def lnlhood_pc(self, p):
+        
         zind = (1+self.startind)+np.arange(self.ncomp)*3
         
         if not all(p[zind] == np.sort(p[zind])):
           return -np.inf, []
+        
+        lhood =  self.lnlhood_worker(p)
+        
+        return lhood, []
+    
+    def lnlhood_dy(self, p):
+        
+        zind = (1+self.startind)+np.arange(self.ncomp)*3
+        
+        if not all(p[zind] == np.sort(p[zind])):
+          return -np.inf
+        
+        return  self.lnlhood_worker(p)
+   
+    def lnlhood_mn(self, p, ndim, nparam):
+        
+        zind = (1+self.startind)+np.arange(self.ncomp)*3
+        parr = np.array([p[x] for x in range(ndim)])
+        
+        if not all(parr[zind] == np.sort(parr[zind])):
+          return -np.inf
+        
+        lhood =  self.lnlhood_worker(p)
+        
+        return lhood
 
-	#reconstruct the spectrum first    
+    def lnlhood_worker(self, p):
+
+        #reconstruct the spectrum first    
 		
 	model_spec = self.reconstruct_spec(p)
         
@@ -199,9 +233,9 @@ class hires_fitter:
           resid = (self.obj-model_spec)/self.obj_noise
           
           if (resid>5).sum() > self.gauss_cdf[2]+self.gracenum:
-             return -np.inf, []
+             return -np.inf
           elif (resid>4).sum() > self.gauss_cdf[1]+self.gracenum:
-             return -np.inf, []
+             return -np.inf
           
           #import matplotlib.pyplot as mp
           #mp.plot(self.obj)
@@ -226,7 +260,7 @@ class hires_fitter:
              
           #return spec_lhood+spec_lprio, []   
         
-        return spec_lhood , []
+        return spec_lhood 
 
     
     def voigt_tau(self, wave, par):
@@ -492,6 +526,11 @@ def readconfig(configfile=None, logger=None):
     else:
         asymmlike = False	
     
+    if input_params.has_option('input', 'solver'):
+        solver = input_params.get('input', 'solver')
+    else:
+        solver = 'polychord'	
+    
     #Paths are desirable but not essential, default to cwd
     if not input_params.has_option('pathing', 'datadir'):
        datadir = './'
@@ -582,6 +621,7 @@ def readconfig(configfile=None, logger=None):
                   'linelist'  : linelist,
 		  'coldef'    : coldef,
                   'asymmlike' : asymmlike,
+                  'solver'    : solver,
 		  'specres'   : specres,
 		  'chaindir'  : chaindir,
 		  'plotdir'   : plotdir,
@@ -598,6 +638,16 @@ def readconfig(configfile=None, logger=None):
                   'dofit'     : dofit,
 		  'doplot'    : doplot}
 		  
+    if input_params.has_section('mnsettings'):
+    
+       settingsdict = (dict((opt, booldir[input_params.get('mnsettings',opt)]) 
+    		 if input_params.get('mnsettings',opt) in ['True','False'] 
+    		 else (opt, input_params.get('mnsettings', opt)) 
+    		 for opt in input_params.options('mnsettings')))
+    
+       run_params['mnsettings'] = settingsdict
+
+
     if input_params.has_section('pcsettings'):
     
        settingsdict = (dict((opt, booldir[input_params.get('pcsettings',opt)]) 
