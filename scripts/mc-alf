@@ -12,6 +12,8 @@ import pypolychord
 from pypolychord.settings import PolyChordSettings
 from mpi4py import MPI
 from routines import hires_fitter as fitter
+import pymultinest
+
 
 pl.rc('text', usetex=True)
 
@@ -35,7 +37,8 @@ if configpars['dofit']:
         with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
 	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
 				 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
-				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], brangefill=configpars['brangefill']) as temp:
+				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
+                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike']) as temp:
 
            settings = PolyChordSettings(temp.ndim, 0)
            settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])
@@ -84,7 +87,8 @@ if configpars['doplot']:
             with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
 	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
 				 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
-				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], brangefill=configpars['brangefill']) as temp:
+				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
+                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike']) as temp:
  	                  
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(comp, temp.nfill), return_sorted=True)
               

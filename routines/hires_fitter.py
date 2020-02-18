@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 
 class hires_fitter:
 
-    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=[1.0], Nrange=[11.5,16], brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None):
+    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=[1.0], Nrange=[11.5,16], brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None, Asymmlike=False):
         
 	""" Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
@@ -29,6 +29,9 @@ class hires_fitter:
         self.fitrange = fitrange
         self.fitlines = fitlines
         self.Gpriors = Gpriors
+        self.Asymmlike = Asymmlike
+        if self.Asymmlike:
+         print("Running asymmetric likelihood")
 	self.specres = specres
 	self.contval = contval
 	self.ncomp = ncomp
@@ -58,8 +61,8 @@ class hires_fitter:
 	self.obj = obj[okrange]
 	self.obj_noise = obj_noise[okrange]
 	self.obj_wl = obj_wl[okrange]
-	
-	self.velstep = (self.obj_wl[1]-self.obj_wl[0])/self.obj_wl[0]*self.clight
+        
+	self.velstep = np.nanmedian((self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight)
 	
 	# read in lines from database
 	linelist = LineList('Strong', verbose=False)
@@ -114,6 +117,11 @@ class hires_fitter:
         
         self.endind   = self.startind+3*self.ncomp
 	
+        #Find where the data is detected at 10 sigma
+        gauss = np.random.normal(size=len(self.obj))
+        self.gauss_cdf = [(gauss>3).sum(), (gauss>4).sum(), (gauss>5).sum()]
+        self.gracenum = 0.01*len(self.obj)
+        
         #Define bounds
         self.bounds = []
         if self.freecont:
@@ -182,21 +190,44 @@ class hires_fitter:
 		
 	model_spec = self.reconstruct_spec(p)
         
-        if np.all(model_spec == 0.):
-            return -np.inf, []
-
         ispec2 = 1./((self.obj_noise)**2)
 
         spec_lhood = -0.5*np.nansum((ispec2*(self.obj-model_spec)**2 - np.log(ispec2) + np.log(2.*np.pi)))
         
-	#pr = self.lnprior(p)
+	if self.Asymmlike:
+          
+          resid = (self.obj-model_spec)/self.obj_noise
+          
+          if (resid>5).sum() > self.gauss_cdf[2]+self.gracenum:
+             return -np.inf, []
+          elif (resid>4).sum() > self.gauss_cdf[1]+self.gracenum:
+             return -np.inf, []
+          
+          #import matplotlib.pyplot as mp
+          #mp.plot(self.obj)
+          #mp.plot(model_spec)
+          #mp.show()
+          
+          #if (resid>4).sum() > 0.001*self.fitchan:
+          #   return -np.inf, []
+          
+          #mp.hist(resid_2sig, bins=75, range=(2,25), histtype='step')
+          #mp.hist(gauss_2sig, bins=75, range=(2,25), histtype='step', lw=2)
+          
+          #mp.show()
+          
+          #stop=1
+          
+          #badres = (model_spec<self.obj)
+          #if badres.sum()>0:
+          #   spec_lprio = -np.inf #1e10*(-0.5*np.nansum((ispec2[badres]*(self.obj[badres]-model_spec[badres])**2 - np.log(ispec2[badres]) + np.log(2.*np.pi))))
+          #else:
+          #  spec_lprio = 0
+             
+          #return spec_lhood+spec_lprio, []   
         
-	#if not np.isfinite(pr):
-        #    return -np.inf
-        
-        pr = 0
-	
-        return spec_lhood + pr, []
+        return spec_lhood , []
+
     
     def voigt_tau(self, wave, par):
     	""" Find the optical depth at input wavelengths
@@ -248,22 +279,22 @@ class hires_fitter:
     	
     def reconstruct_onecomp(self, continuum, N, z, b):
         
-        specmodel = np.zeros_like(self.obj)+continuum
+        specmodel = np.ones_like(self.obj)
 	
 	for line in range(self.numlines):
            voigt=self.voigt_model(self.obj_wl, N, b, z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
 	   specmodel *= voigt
 	    
-        #return the re-normalized model + emission lines
+        #return the re-normalized model multipled by continuum
 	if self.specres > self.velstep:
 	     specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
-             return specmodel_conv
+             return specmodel_conv*continuum
 	else:
-             return specmodel
+             return specmodel*continuum
 
     def reconstruct_onecomp_fill(self, continuum, N, z, b):
         
-        specmodel = np.zeros_like(self.obj)+continuum
+        specmodel = np.ones_like(self.obj)
 	
         voigt=self.voigt_model(self.obj_wl, N, b, z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
 	specmodel *= voigt
@@ -271,9 +302,9 @@ class hires_fitter:
         #return the re-normalized model + emission lines
 	if self.specres > self.velstep:
 	     specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
-             return specmodel_conv
+             return specmodel_conv*continuum
 	else:
-             return specmodel
+             return specmodel*continuum
 
     
     def reconstruct_spec(self, p, targonly=False):
@@ -281,11 +312,13 @@ class hires_fitter:
 	#targonly means reconstruct the full profile of the lines without fillers
 	
         if self.freecont:
-           specmodel = np.zeros_like(self.obj)+p[0]
+           continuum = p[0]
         else:
-           specmodel = np.zeros_like(self.obj)+self.contval
+           continuum = self.contval
 	
-	for comp in range(self.ncomp):
+        specmodel = np.ones_like(self.obj)
+	
+        for comp in range(self.ncomp):
 	    _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
 	    
 	    for line in range(self.numlines):
@@ -299,12 +332,12 @@ class hires_fitter:
               voigt=self.voigt_model(self.obj_wl, _N, _b, _z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
 	      specmodel *= voigt
             
-        #return the re-normalized model + emission lines
+        #return the re-normalized model normalized by continuum
 	if self.specres > self.velstep:
 	     specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
-             return specmodel_conv
+             return specmodel_conv*continuum
 	else:
-             return specmodel
+             return specmodel*continuum
     
     def calc_w(self, p, lineid=0):
         
@@ -453,6 +486,11 @@ def readconfig(configfile=None, logger=None):
         specres = 7.0
     else:
         specres = float(input_params.get('input', 'specres')[0])	
+
+    if input_params.has_option('input', 'asymmlike'):
+        asymmlike = booldir[input_params.get('input', 'asymmlike')]
+    else:
+        asymmlike = False	
     
     #Paths are desirable but not essential, default to cwd
     if not input_params.has_option('pathing', 'datadir'):
@@ -536,11 +574,14 @@ def readconfig(configfile=None, logger=None):
        doplot = booldir[input_params.get('run', 'doplot')]
     else:
        doplot = True
+       
+       
 
     run_params = {'specfile'  : datadir+input_params.get('input', 'specfile'),
                   'wavefit'   : wavefit,
                   'linelist'  : linelist,
 		  'coldef'    : coldef,
+                  'asymmlike' : asymmlike,
 		  'specres'   : specres,
 		  'chaindir'  : chaindir,
 		  'plotdir'   : plotdir,
@@ -554,7 +595,7 @@ def readconfig(configfile=None, logger=None):
 		  'brangefill': brangefill,
 		  'contval'   : contval,
 		  'nmaxcols'  : nmaxcols,
-		  'dofit'     : dofit,
+                  'dofit'     : dofit,
 		  'doplot'    : doplot}
 		  
     if input_params.has_section('pcsettings'):
