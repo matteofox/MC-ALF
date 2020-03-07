@@ -14,10 +14,14 @@ from routines import hires_fitter as fitter
 pl.rc('text', usetex=True)
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--debug', action='store_true')
 parser.add_argument('config')
 args = parser.parse_args()
 
 configpars = fitter.readconfig(args.config)
+
+if args.debug:
+   print('DEBUG mode, increased verbosity')
 
 #Create directories if necessary
 if MPI.COMM_WORLD.rank==0:
@@ -34,7 +38,8 @@ if configpars['dofit']:
 	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
 				 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
 				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
-                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike']) as temp:
+                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike'], \
+                                 debug= args.debug) as temp:
 
            if configpars['solver'] == 'polychord':
               
@@ -135,7 +140,8 @@ if configpars['doplot']:
 	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
 				 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
 				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
-                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike']) as temp:
+                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike'], \
+                                 debug=args.debug) as temp:
  	                  
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(comp, temp.nfill), return_sorted=True)
               

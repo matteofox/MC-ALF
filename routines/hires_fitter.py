@@ -18,13 +18,16 @@ warnings.filterwarnings("ignore")
 
 class hires_fitter:
 
-    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=[1.0], Nrange=[11.5,16], brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], Gpriors=None, Asymmlike=False):
+    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=[1.0], Nrange=[11.5,16], \
+                 brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], \
+                 Gpriors=None, Asymmlike=False, debug=False):
         
 	""" Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
         """
 	
        #input information of the galaxy to be fitted
+        self.debug = debug
         self.specfile = specfile
         self.fitrange = fitrange
         self.fitlines = fitlines
@@ -190,10 +193,13 @@ class hires_fitter:
         
         zind = (1+self.startind)+np.arange(self.ncomp)*3
         
-        if not all(p[zind] == np.sort(p[zind])):
-          return -np.inf, []
+        if self.ncomp<10:
+          if not all(p[zind] == np.sort(p[zind])):
+            return -np.inf, []
         
         lhood =  self.lnlhood_worker(p)
+        if self.debug:
+           print(lhood)
         
         return lhood, []
     
@@ -201,8 +207,9 @@ class hires_fitter:
         
         zind = (1+self.startind)+np.arange(self.ncomp)*3
         
-        if not all(p[zind] == np.sort(p[zind])):
-          return -np.inf
+        if self.ncomp<10:
+          if not all(p[zind] == np.sort(p[zind])):
+            return -np.inf
         
         return  self.lnlhood_worker(p)
    
@@ -211,8 +218,9 @@ class hires_fitter:
         zind = (1+self.startind)+np.arange(self.ncomp)*3
         parr = np.array([p[x] for x in range(ndim)])
         
-        if not all(parr[zind] == np.sort(parr[zind])):
-          return -np.inf
+        if self.ncomp<10:
+          if not all(parr[zind] == np.sort(parr[zind])):
+            return -np.inf
         
         lhood =  self.lnlhood_worker(p)
         
