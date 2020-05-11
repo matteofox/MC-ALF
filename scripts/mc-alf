@@ -9,7 +9,8 @@ import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
 from mpi4py import MPI
-from routines import hires_fitter as fitter
+
+from mcalf.routines import hires_fitter as fitter
 
 pl.rc('text', usetex=True)
 

@@ -76,7 +76,7 @@ if __name__ == "__main__":
       print("Python bindings for PolyChordLite must be installed before mc-alf can be installed.")  
       exit()
       
-    with open('routines/_version.py') as f:
+    with open('mcalf/_version.py') as f:
         exec(f.read())
 
     setup(
@@ -87,7 +87,8 @@ if __name__ == "__main__":
         author_email="matteo.fossati@durham.ac.uk",
         cmdclass = cmdclass,
         scripts = scripts, 
-        packages=["routines"],
+        packages=["mcalf",
+                  "mcalf.routines"],
         license="LICENSE",
         description="Monte-Carlo Absorption Line Fitter",
 	install_requires=[
