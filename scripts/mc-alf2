@@ -179,7 +179,7 @@ if configpars['doplot']:
                     ncols = configpars['nmaxcols']   
                                  
                  figsize = (10*ncols,5*nrows)
-                 fig, ax = pl.subplots(nrows=nrows, ncols=ncols, sharey=True, figsize=figsize, squeeze=False)
+                 fig, ax = pl.subplots(nrows=int(nrows), ncols=int(ncols), sharey=True, figsize=figsize, squeeze=False)
                  
                  nsamp = min([len(values),100])
                  if nsamp< 100:
@@ -189,8 +189,8 @@ if configpars['doplot']:
                  
                  for waverange in range(temp.numfitranges):
                    
-                   colind = waverange % configpars['nmaxcols'] 
-                   rowind = waverange / configpars['nmaxcols'] 
+                   colind = int(waverange % configpars['nmaxcols']) 
+                   rowind = int(waverange / configpars['nmaxcols']) 
                    
                    ax[rowind,colind].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
                    ax[rowind,colind].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
