@@ -66,9 +66,12 @@ if __name__ == "__main__":
                     numpy.get_include(),
                    ]
 
-    scripts = ['scripts/'+file for file in os.listdir('scripts/')]  
+    py_major = sys.version_info[0]
 
+    scripts = ['scripts/mc-alf{}'.format(py_major)]  
+    
     cmdclass = {'clean': CleanCommand}
+    
     
     try:
       import pypolychord

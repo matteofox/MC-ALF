@@ -22,10 +22,10 @@ class hires_fitter:
                  brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], \
                  Gpriors=None, Asymmlike=False, debug=False):
         
-	""" Class for dealing with MultiNest fitting
+        """ Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
         """
-	
+        
        #input information of the galaxy to be fitted
         self.debug = debug
         self.specfile = specfile
@@ -35,48 +35,48 @@ class hires_fitter:
         self.Asymmlike = Asymmlike
         if self.Asymmlike:
          print("Running asymmetric likelihood")
-	self.specres = specres
-	self.contval = contval
-	self.ncomp = ncomp
+        self.specres = specres
+        self.contval = contval
+        self.ncomp = ncomp
         self.nfill = nfill
         if len(contval)>1:
            self.freecont = True
         else:
            self.freecont = False
         
-	#constants
+        #constants
         self.small_num = 1e-70
         self.clight  = 2.9979245e5 #km/s
-	self.ccgs = 2.9979245e10 #cm/s
+        self.ccgs = 2.9979245e10 #cm/s
         
-	#read dataset so it can be used in the fit		
-	file = ascii.read(self.specfile)
+        #read dataset so it can be used in the fit              
+        file = ascii.read(self.specfile)
         obj_wl    = np.asarray(file[coldef[0]], dtype=float)
         obj       = np.asarray(file[coldef[1]], dtype=float)
         obj_noise = np.asarray(file[coldef[2]], dtype=float)
 
         #Select the spectral range to be used 
-        okrange = np.zeros_like(obj_wl, dtype=bool)	
+        okrange = np.zeros_like(obj_wl, dtype=bool)     
         self.numfitranges = len(self.fitrange)
-	for i in range(self.numfitranges):
+        for i in range(self.numfitranges):
            okrange[(obj_wl>self.fitrange[i][0]) & (obj_wl<self.fitrange[i][1])] = True
-	
-	self.obj = obj[okrange]
-	self.obj_noise = obj_noise[okrange]
-	self.obj_wl = obj_wl[okrange]
         
-	self.velstep = np.nanmedian((self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight)
-	
-	# read in lines from database
-	linelist = LineList('Strong', verbose=False)
+        self.obj = obj[okrange]
+        self.obj_noise = obj_noise[okrange]
+        self.obj_wl = obj_wl[okrange]
+        
+        self.velstep = np.nanmedian((self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight)
+        
+        # read in lines from database
+        linelist = LineList('Strong', verbose=False)
         
         #Extract line parameters from database, raise error if not found
-	self.numlines = len(fitlines)
+        self.numlines = len(fitlines)
         linepars = []
         for i in range(self.numlines):
             temp = linelist[self.fitlines[i]]
             if temp is None:
-               print 'ERROR: Line {} not found in database. Aborting.'.format(self.fitlines[i])
+               print('ERROR: Line {} not found in database. Aborting.'.format(self.fitlines[i]))
                return 0
             else:
                linepars.append(temp)
@@ -89,28 +89,28 @@ class hires_fitter:
         self.linefill['wrest'] = 250 *u.angstrom
         
         #If fitting multiplets the z range spans the spectrum where the first line is expected
-	self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
-	self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
+        self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
+        self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
         
         #For fillers they can be anywhere
         self.zmin_fill = ((np.min(obj_wl)+0.25)/self.linefill['wrest'].value)-1.
-	self.zmax_fill = ((np.max(obj_wl)-0.25)/self.linefill['wrest'].value)-1.
+        self.zmax_fill = ((np.max(obj_wl)-0.25)/self.linefill['wrest'].value)-1.
         
         #set up parameter limits
         self.cont_lims = np.array(contval)
         
-	self.N_lims = np.array(Nrange)
+        self.N_lims = np.array(Nrange)
         self.N_lims_fill = np.array(Nrangefill)
-	
-	self.b_lims = np.array(brange)
-	self.b_lims_fill = np.array(brangefill)
-	
-	if zrange is not None:
-	  self.z_lims = zrange
+        
+        self.b_lims = np.array(brange)
+        self.b_lims_fill = np.array(brangefill)
+        
+        if zrange is not None:
+          self.z_lims = zrange
         else:
-	  self.z_lims = np.array((self.zmin, self.zmax))
-	
-	self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
+          self.z_lims = np.array((self.zmin, self.zmax))
+        
+        self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
      
         #Define start and ending indices for lines of interest
         if self.freecont:
@@ -119,7 +119,7 @@ class hires_fitter:
            self.startind = 0   
         
         self.endind   = self.startind+3*self.ncomp
-	
+        
         #Find where the data is detected at 10 sigma
         gauss = np.random.normal(size=len(self.obj))
         self.gauss_cdf = [(gauss>3).sum(), (gauss>4).sum(), (gauss>5).sum()]
@@ -129,20 +129,20 @@ class hires_fitter:
         self.bounds = []
         if self.freecont:
           self.bounds.append(self.cont_lims)
-	for ii in range(self.ncomp):
-	  self.bounds.append(self.N_lims)
-	  self.bounds.append(self.z_lims)
-	  self.bounds.append(self.b_lims)
+        for ii in range(self.ncomp):
+          self.bounds.append(self.N_lims)
+          self.bounds.append(self.z_lims)
+          self.bounds.append(self.b_lims)
         for ii in range(self.nfill):
-	  self.bounds.append(self.N_lims_fill)
-	  self.bounds.append(self.z_lims_fill)
-	  self.bounds.append(self.b_lims_fill)
+          self.bounds.append(self.N_lims_fill)
+          self.bounds.append(self.z_lims_fill)
+          self.bounds.append(self.b_lims_fill)
           
         self.ndim = len(self.bounds)  
-        	  	  
+                          
     def _scale_cube_pc(self, cube):
         
-	cube2 = np.copy(cube)
+        cube2 = np.copy(cube)
         for ii in range(len(cube)):
             cube2[ii] = cube2[ii]*self.bounds[ii].ptp() + np.min(self.bounds[ii])
         
@@ -161,24 +161,24 @@ class hires_fitter:
         ndim = len(p)
         if all(b[0] <= v <= b[1] for v, b in zip(p, self.bounds)):
             
-	    pav = 0
-	    
-	    if self.Gpriors is not None:
-	      for par in range(ndim):
-	        if self.Gpriors[2*par] != 'none' and self.Gpriors[(2*par)+1] != 'none':
-		  val = float(self.Gpriors[2*par])
-		  sig = float(self.Gpriors[(2*par)+1])
+            pav = 0
+            
+            if self.Gpriors is not None:
+              for par in range(ndim):
+                if self.Gpriors[2*par] != 'none' and self.Gpriors[(2*par)+1] != 'none':
+                  val = float(self.Gpriors[2*par])
+                  sig = float(self.Gpriors[(2*par)+1])
                   pav  +=  -0.5*(((p[par]-val)/sig)**2 + np.log(2.*np.pi*sig**2))
-		  
-	    return pav
+                  
+            return pav
 
         return -np.inf
     
     def chi2(self,p):
-	
+        
         #reconstruct the spectrum first    
-		
-	model_spec = self.reconstruct_spec(p)
+                
+        model_spec = self.reconstruct_spec(p)
         
         if np.all(model_spec == 0.):
             return +np.inf, []
@@ -229,14 +229,14 @@ class hires_fitter:
     def lnlhood_worker(self, p):
 
         #reconstruct the spectrum first    
-		
-	model_spec = self.reconstruct_spec(p)
+                
+        model_spec = self.reconstruct_spec(p)
         
         ispec2 = 1./((self.obj_noise)**2)
 
         spec_lhood = -0.5*np.nansum((ispec2*(self.obj-model_spec)**2 - np.log(ispec2) + np.log(2.*np.pi)))
         
-	if self.Asymmlike:
+        if self.Asymmlike:
           
           resid = (self.obj-model_spec)/self.obj_noise
           
@@ -272,152 +272,152 @@ class hires_fitter:
 
     
     def voigt_tau(self, wave, par):
-    	""" Find the optical depth at input wavelengths
+        """ Find the optical depth at input wavelengths
 
-    	This is a stripped down routine for calculating a tau array for an
-    	input line. Built for speed, not utility nor with much error
-    	checking.  Use wisely.  And take careful note of the expected
-    	units of the inputs (cgs)
+        This is a stripped down routine for calculating a tau array for an
+        input line. Built for speed, not utility nor with much error
+        checking.  Use wisely.  And take careful note of the expected
+        units of the inputs (cgs)
 
-    	Parameters
-    	----------
-    	wave : ndarray
-    	  Assumed to be in cm
-    	parm : list
-    	  Line parameters.  All are input unitless and should be in cgs
-    	    par[0] = logN (cm^-2)
-    	    par[1] = z
-    	    par[2] = b in cm/s
-    	    par[3] = wrest in cm
-    	    par[4] = f value
-    	    par[5] = gamma (s^-1)
+        Parameters
+        ----------
+        wave : ndarray
+          Assumed to be in cm
+        parm : list
+          Line parameters.  All are input unitless and should be in cgs
+            par[0] = logN (cm^-2)
+            par[1] = z
+            par[2] = b in cm/s
+            par[3] = wrest in cm
+            par[4] = f value
+            par[5] = gamma (s^-1)
 
-    	Returns
-    	-------
-    	tau : ndarray
-    	  Optical depth at input wavelengths
-    	"""
-    	cold = 10.0**par[0]
-    	zp1=par[1]+1.0
-    	nujk = self.ccgs / par[3]
-    	dnu = par[2]/par[3] 
-    	avoigt = par[5]/( 4 * np.pi * dnu)
-    	uvoigt = ((self.ccgs / (wave/zp1)) - nujk) / dnu
-    	# Voigt
-    	cne = 0.014971475 * cold * par[4] 
-    	tau = cne * wofz(uvoigt + 1j * avoigt).real / dnu
-    	#
-    	return tau
+        Returns
+        -------
+        tau : ndarray
+          Optical depth at input wavelengths
+        """
+        cold = 10.0**par[0]
+        zp1=par[1]+1.0
+        nujk = self.ccgs / par[3]
+        dnu = par[2]/par[3] 
+        avoigt = par[5]/( 4 * np.pi * dnu)
+        uvoigt = ((self.ccgs / (wave/zp1)) - nujk) / dnu
+        # Voigt
+        cne = 0.014971475 * cold * par[4] 
+        tau = cne * wofz(uvoigt + 1j * avoigt).real / dnu
+        #
+        return tau
 
     def voigt_model(self, wave, N, b, z, wrest, f, gamma):
         '''Generate a single Voigt model 
-	
+        
         input: wave array  :: Assumed in Angstroms; needs to be unitless
         output: absorbed, normalized flux
         '''
-	
+        
         tau = self.voigt_tau(wave/1e8, [N,z,b*1e5,wrest/1e8,f,gamma])
         return np.exp(-1*tau)
-    	
+        
     def reconstruct_onecomp(self, continuum, N, z, b):
         
         specmodel = np.ones_like(self.obj)
-	
-	for line in range(self.numlines):
+        
+        for line in range(self.numlines):
            voigt=self.voigt_model(self.obj_wl, N, b, z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
-	   specmodel *= voigt
-	    
+           specmodel *= voigt
+            
         #return the re-normalized model multipled by continuum
-	if self.specres > self.velstep:
-	     specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
+        if self.specres > self.velstep:
+             specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
-	else:
+        else:
              return specmodel*continuum
 
     def reconstruct_onecomp_fill(self, continuum, N, z, b):
         
         specmodel = np.ones_like(self.obj)
-	
+        
         voigt=self.voigt_model(self.obj_wl, N, b, z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
-	specmodel *= voigt
-	    
+        specmodel *= voigt
+            
         #return the re-normalized model + emission lines
-	if self.specres > self.velstep:
-	     specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
+        if self.specres > self.velstep:
+             specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
-	else:
+        else:
              return specmodel*continuum
 
     
     def reconstruct_spec(self, p, targonly=False):
         
-	#targonly means reconstruct the full profile of the lines without fillers
-	
+        #targonly means reconstruct the full profile of the lines without fillers
+        
         if self.freecont:
            continuum = p[0]
         else:
            continuum = self.contval
-	
+        
         specmodel = np.ones_like(self.obj)
-	
+        
         for comp in range(self.ncomp):
-	    _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
-	    
-	    for line in range(self.numlines):
+            _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
+            
+            for line in range(self.numlines):
                voigt=self.voigt_model(self.obj_wl, _N, _b, _z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
-	       specmodel *= voigt
-	
+               specmodel *= voigt
+        
         if not targonly:
-	   for fill in range(self.nfill):
+           for fill in range(self.nfill):
               _N, _z, _b = p[3*fill+self.endind:3*fill+3+self.endind]
              
               voigt=self.voigt_model(self.obj_wl, _N, _b, _z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
-	      specmodel *= voigt
+              specmodel *= voigt
             
         #return the re-normalized model normalized by continuum
-	if self.specres > self.velstep:
-	     specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
+        if self.specres > self.velstep:
+             specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
-	else:
+        else:
              return specmodel*continuum
     
     def calc_w(self, p, lineid=0):
         
-	#Calculate rest frame equivalent width of the 
-	#absorption profile
-	Wtot = 0
+        #Calculate rest frame equivalent width of the 
+        #absorption profile
+        Wtot = 0
 
         if self.freecont:
            cont = p[0]
         else:
            cont = self.contval
-	
-	for comp in range(self.ncomp):
-	    _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
+        
+        for comp in range(self.ncomp):
+            _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
             absorption=(np.zeros_like(self.obj)+cont)*self.voigt_model(self.obj_wl, _N, _b, _z, self.linepars[lineid]['wrest'].value, self.linepars[lineid]['f'], self.linepars[lineid]['gamma'].value) 
-	    
-	    dlambda = np.diff(self.obj_wl)
-	    dlambda = np.insert(dlambda,0,dlambda[0])
-	    
-	    Wtemp = np.sum( (1-(absorption/cont)) * dlambda )
-	    Wtot += Wtemp/(1+_z)
-	
-	return Wtot
+            
+            dlambda = np.diff(self.obj_wl)
+            dlambda = np.insert(dlambda,0,dlambda[0])
+            
+            Wtemp = np.sum( (1-(absorption/cont)) * dlambda )
+            Wtot += Wtemp/(1+_z)
+        
+        return Wtot
     
     def calc_N(self, p):
         
-	#Calculate rest frame equivalent width of the 
-	#absorption profile
-	Ntot = 0
+        #Calculate rest frame equivalent width of the 
+        #absorption profile
+        Ntot = 0
 
-	allN = p[self.startind::3]
-	allz = p[self.startind+1::3]
-	
-	okN = (allz<10)
-	allN = 10**allN[okN]
-	
-	return np.log10(np.sum(allN))
-	
+        allN = p[self.startind::3]
+        allz = p[self.startind+1::3]
+        
+        okN = (allz<10)
+        allN = 10**allN[okN]
+        
+        return np.log10(np.sum(allN))
+        
     
     
     def __call__(self, p):
@@ -505,39 +505,39 @@ def readconfig(configfile=None, logger=None):
     if not input_params.has_option('input', 'wavefit'):
         raise configparser.NoOptionError("input", "wavefit")
     else:
-	tmpwavefit  = input_params.get('input', 'wavefit').split(',')
-	nwaves = len(tmpwavefit)
-	if nwaves % 2 == 1:
-	  raise ValueError("Number of wavefit values must be even")
-	else:
-	  wavefit = []
-	  for i in range(nwaves/2):
-	    wavefit.append((float(tmpwavefit[2*i]),float(tmpwavefit[2*i+1])))  
+        tmpwavefit  = input_params.get('input', 'wavefit').split(',')
+        nwaves = len(tmpwavefit)
+        if nwaves % 2 == 1:
+          raise ValueError("Number of wavefit values must be even")
+        else:
+          wavefit = []
+          for i in range(int(nwaves/2)):
+            wavefit.append((float(tmpwavefit[2*i]),float(tmpwavefit[2*i+1])))  
         
     if not input_params.has_option('input', 'linelist'):
         raise configparser.NoOptionError("input", "linelist")
     else:
         linelist = input_params.get('input', 'linelist').split(',')
-	
+        
     if not input_params.has_option('input', 'coldef'):
         coldef = ['Wave', 'Flux', 'Err']
     else:
-        coldef = input_params.get('input', 'coldef').split(',')	
+        coldef = input_params.get('input', 'coldef').split(',') 
     
     if not input_params.has_option('input', 'specres'):
         specres = 7.0
     else:
-        specres = float(input_params.get('input', 'specres')[0])	
+        specres = float(input_params.get('input', 'specres')[0])        
 
     if input_params.has_option('input', 'asymmlike'):
         asymmlike = booldir[input_params.get('input', 'asymmlike')]
     else:
-        asymmlike = False	
+        asymmlike = False       
     
     if input_params.has_option('input', 'solver'):
         solver = input_params.get('input', 'solver')
     else:
-        solver = 'polychord'	
+        solver = 'polychord'    
     
     #Paths are desirable but not essential, default to cwd
     if not input_params.has_option('pathing', 'datadir'):
@@ -627,31 +627,31 @@ def readconfig(configfile=None, logger=None):
     run_params = {'specfile'  : datadir+input_params.get('input', 'specfile'),
                   'wavefit'   : wavefit,
                   'linelist'  : linelist,
-		  'coldef'    : coldef,
+                  'coldef'    : coldef,
                   'asymmlike' : asymmlike,
                   'solver'    : solver,
-		  'specres'   : specres,
-		  'chaindir'  : chaindir,
-		  'plotdir'   : plotdir,
-		  'chainfmt'  : chainfmt,
-		  'ncomp'     : ncomp,
-		  'nfill'     : nfill,
-		  'Nrange'    : Nrange,
-		  'brange'    : brange,
-		  'zrange'    : zrange,
-		  'Nrangefill': Nrangefill,
-		  'brangefill': brangefill,
-		  'contval'   : contval,
-		  'nmaxcols'  : nmaxcols,
+                  'specres'   : specres,
+                  'chaindir'  : chaindir,
+                  'plotdir'   : plotdir,
+                  'chainfmt'  : chainfmt,
+                  'ncomp'     : ncomp,
+                  'nfill'     : nfill,
+                  'Nrange'    : Nrange,
+                  'brange'    : brange,
+                  'zrange'    : zrange,
+                  'Nrangefill': Nrangefill,
+                  'brangefill': brangefill,
+                  'contval'   : contval,
+                  'nmaxcols'  : nmaxcols,
                   'dofit'     : dofit,
-		  'doplot'    : doplot}
-		  
+                  'doplot'    : doplot}
+                  
     if input_params.has_section('mnsettings'):
     
        settingsdict = (dict((opt, booldir[input_params.get('mnsettings',opt)]) 
-    		 if input_params.get('mnsettings',opt) in ['True','False'] 
-    		 else (opt, input_params.get('mnsettings', opt)) 
-    		 for opt in input_params.options('mnsettings')))
+                 if input_params.get('mnsettings',opt) in ['True','False'] 
+                 else (opt, input_params.get('mnsettings', opt)) 
+                 for opt in input_params.options('mnsettings')))
     
        run_params['mnsettings'] = settingsdict
 
@@ -659,12 +659,12 @@ def readconfig(configfile=None, logger=None):
     if input_params.has_section('pcsettings'):
     
        settingsdict = (dict((opt, booldir[input_params.get('pcsettings',opt)]) 
-    		 if input_params.get('pcsettings',opt) in ['True','False'] 
-    		 else (opt, input_params.get('pcsettings', opt)) 
-    		 for opt in input_params.options('pcsettings')))
+                 if input_params.get('pcsettings',opt) in ['True','False'] 
+                 else (opt, input_params.get('pcsettings', opt)) 
+                 for opt in input_params.options('pcsettings')))
     
        run_params['pcsettings'] = settingsdict
-		  
+                  
     
 
     return run_params

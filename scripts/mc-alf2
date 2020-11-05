@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 from __future__ import print_function
 import numpy as np
@@ -36,9 +36,9 @@ if configpars['dofit']:
     for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
         
         with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
-	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
-				 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
-				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
+                                 nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
+                                 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
+                                 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
                                  brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike'], \
                                  debug= args.debug) as temp:
 
@@ -51,9 +51,9 @@ if configpars['dofit']:
               settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])
               settings.base_dir = configpars['chaindir']
            
-	      if 'pcsettings' in configpars:
-	         configsettings = configpars['pcsettings']
-	         settings.nlive         = int(configsettings['nlive'])
+              if 'pcsettings' in configpars:
+                 configsettings = configpars['pcsettings']
+                 settings.nlive         = int(configsettings['nlive'])
                  settings.num_repeats   = int(configsettings['num_repeats'])
                  settings.precision_criterion = float(configsettings['precision_criterion'])
                  settings.feedback      = int(configsettings['feedback'])
@@ -66,23 +66,23 @@ if configpars['dofit']:
                  settings.write_prior   = configsettings['write_prior']
                  settings.posteriors    = configsettings['posteriors']
                  settings.cluster_posteriors = configsettings['cluster_posteriors']
-	   
+           
               #| Run PolyChord
            
               t0 = datetime.datetime.now()
-	      output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+              output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
               t1 = datetime.datetime.now()
-	      if MPI.COMM_WORLD.rank==0:
-	         print('Execution time {}'.format(t1-t0))
+              if MPI.COMM_WORLD.rank==0:
+                 print('Execution time {}'.format(t1-t0))
             
            elif configpars['solver'] == 'multinest':
               
               import pymultinest
               
               out_fmt = configpars['chaindir']+'/'+configpars['chainfmt'].format(comp, configpars['nfill'])
-	      
+              
               if 'mnsettings' in configpars:
-	         configsettings = configpars['mnsettings']
+                 configsettings = configpars['mnsettings']
                  if 'nlive' in configsettings:
                     nlive = int(configsettings['nlive'])
                  else:
@@ -98,8 +98,8 @@ if configpars['dofit']:
                    importance_nested_sampling=False, n_live_points=nlive, n_iter_before_update=100, \
                    evidence_tolerance=0.1)
               t1 = datetime.datetime.now()
-	      if MPI.COMM_WORLD.rank==0:
-	         print('Execution time {}'.format(t1-t0))
+              if MPI.COMM_WORLD.rank==0:
+                 print('Execution time {}'.format(t1-t0))
            
            elif configpars['solver'] == 'dynesty':
                
@@ -138,12 +138,12 @@ if configpars['doplot']:
           if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(comp, configpars['nfill'])+'_equal_weights.txt'): 
             
             with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
-	                         nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
-				 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
-				 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
+                                 nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
+                                 specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
+                                 zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
                                  brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike'], \
                                  debug=args.debug) as temp:
- 	                  
+                          
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(comp, temp.nfill), return_sorted=True)
               
               #Define parameter names
@@ -160,7 +160,7 @@ if configpars['doplot']:
               #Calc median likelihood across posterior
               lnlhood = np.percentile(lhoodval, 50)
               AIC = 2*temp.ndim-2*lnlhood
-	      chi2 = temp.chi2(meds)
+              chi2 = temp.chi2(meds)
               
               AIC_existing.append(AIC)
               Ncomp_existing.append(comp)
@@ -168,30 +168,30 @@ if configpars['doplot']:
               print('{0:02}+{1:02} Components: Ln(z): {2:6.3f}, Ln(L): {3:6.3f}, Chi2: {5:6.3f}, AIC: {4:6.3f}'.format(comp, temp.nfill, lnz, lnlhood, AIC, chi2))
                               
               if comp in plotrange:
-	         
-		 nrows = (temp.numfitranges / configpars['nmaxcols'] )
-		 if temp.numfitranges % configpars['nmaxcols'] > 0:
-		    nrows += 1
-		    
-		 if nrows == 1:
-		    ncols = temp.numfitranges
-		 else:
-		    ncols = configpars['nmaxcols']   
-		 		 
+                 
+                 nrows = (temp.numfitranges / configpars['nmaxcols'] )
+                 if temp.numfitranges % configpars['nmaxcols'] > 0:
+                    nrows += 1
+                    
+                 if nrows == 1:
+                    ncols = temp.numfitranges
+                 else:
+                    ncols = configpars['nmaxcols']   
+                                 
                  figsize = (10*ncols,5*nrows)
                  fig, ax = pl.subplots(nrows=nrows, ncols=ncols, sharey=True, figsize=figsize, squeeze=False)
                  
-		 nsamp = min([len(values),100])
+                 nsamp = min([len(values),100])
                  if nsamp< 100:
-		    rsamples = np.arange(nsamp)
-		 else:
-		    rsamples = np.random.randint(values.shape[0], size=nsamp)
-		 
+                    rsamples = np.arange(nsamp)
+                 else:
+                    rsamples = np.random.randint(values.shape[0], size=nsamp)
+                 
                  for waverange in range(temp.numfitranges):
                    
-		   colind = waverange % configpars['nmaxcols'] 
-		   rowind = waverange / configpars['nmaxcols'] 
-		   
+                   colind = waverange % configpars['nmaxcols'] 
+                   rowind = waverange / configpars['nmaxcols'] 
+                   
                    ax[rowind,colind].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
                    ax[rowind,colind].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
                    ax[rowind,colind].set_xlim(configpars['wavefit'][waverange])
@@ -216,9 +216,9 @@ if configpars['doplot']:
                        ax[rowind,colind].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
                        
                        #Plot ticks at component positions, needs to be done for all 
-		       #transitions in the plotted range
+                       #transitions in the plotted range
                        for trans in range(temp.numlines):
-		         wave = temp.linepars[trans]['wrest'].value*(1+_z)
+                         wave = temp.linepars[trans]['wrest'].value*(1+_z)
                          ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='red')
         
                  fig.tight_layout()
