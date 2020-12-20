@@ -153,9 +153,17 @@ if configpars['doplot']:
               percs = np.transpose(np.percentile(values, [16,50,84], axis=0))
         
               if len(temp.contval)>1:
-                 continuum = meds[0]
+                 if len(temp.specres)>1:
+                   continuum = meds[1]
+                 else:
+                   continuum = meds[0]  
               else:
                  continuum = temp.contval 
+              
+              if len(temp.specres)>1:
+                 specresolution = meds[0]
+              else:
+                 specresolution = temp.specres   
                             
               #Calc median likelihood across posterior
               lnlhood = np.percentile(lhoodval, 50)
@@ -208,10 +216,10 @@ if configpars['doplot']:
                        
                        if _z<10:
                           color = 'dodgerblue'
-                          spec1 = temp.reconstruct_onecomp(continuum, _N, _z, _b)
+                          spec1 = temp.reconstruct_onecomp(specresolution, continuum, _N, _z, _b)
                        else:
                           color = 'salmon' 
-                          spec1 = temp.reconstruct_onecomp_fill(continuum, _N, _z, _b)  
+                          spec1 = temp.reconstruct_onecomp_fill(specresolution, continuum, _N, _z, _b)  
                        
                        ax[rowind,colind].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
                        

@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 
 class hires_fitter:
 
-    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=7.0, contval=[1.0], Nrange=[11.5,16], \
+    def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=[7.0], contval=[1.0], Nrange=[11.5,16], \
                  brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], \
                  Gpriors=None, Asymmlike=False, debug=False):
         
@@ -44,6 +44,11 @@ class hires_fitter:
         else:
            self.freecont = False
         
+        if len(specres)>1:
+           self.freespecres = True
+        else:
+           self.freespecres = False
+       
         #constants
         self.small_num = 1e-70
         self.clight  = 2.9979245e5 #km/s
@@ -98,6 +103,7 @@ class hires_fitter:
         
         #set up parameter limits
         self.cont_lims = np.array(contval)
+        self.res_lims = np.array(specres)
         
         self.N_lims = np.array(Nrange)
         self.N_lims_fill = np.array(Nrangefill)
@@ -113,11 +119,13 @@ class hires_fitter:
         self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
      
         #Define start and ending indices for lines of interest
-        if self.freecont:
-           self.startind = 1
-        else:
-           self.startind = 0   
+        self.starind = 0
         
+        if self.freecont:
+           self.startind += 1
+        if self.freespecres:
+           self.startind += 1
+                
         self.endind   = self.startind+3*self.ncomp
         
         #Find where the data is detected at 10 sigma
@@ -127,6 +135,8 @@ class hires_fitter:
         
         #Define bounds
         self.bounds = []
+        if self.freespecres:
+          self.bounds.appen(self.res_lims)
         if self.freecont:
           self.bounds.append(self.cont_lims)
         for ii in range(self.ncomp):
@@ -319,7 +329,7 @@ class hires_fitter:
         tau = self.voigt_tau(wave/1e8, [N,z,b*1e5,wrest/1e8,f,gamma])
         return np.exp(-1*tau)
         
-    def reconstruct_onecomp(self, continuum, N, z, b):
+    def reconstruct_onecomp(self, specresolution, continuum, N, z, b):
         
         specmodel = np.ones_like(self.obj)
         
@@ -329,12 +339,12 @@ class hires_fitter:
             
         #return the re-normalized model multipled by continuum
         if self.specres > self.velstep:
-             specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
+             specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
         else:
              return specmodel*continuum
 
-    def reconstruct_onecomp_fill(self, continuum, N, z, b):
+    def reconstruct_onecomp_fill(self, specresolution, continuum, N, z, b):
         
         specmodel = np.ones_like(self.obj)
         
@@ -343,7 +353,7 @@ class hires_fitter:
             
         #return the re-normalized model + emission lines
         if self.specres > self.velstep:
-             specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
+             specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
         else:
              return specmodel*continuum
@@ -352,9 +362,16 @@ class hires_fitter:
     def reconstruct_spec(self, p, targonly=False):
         
         #targonly means reconstruct the full profile of the lines without fillers
+        if self.freespecres:
+           specresolution = p[0]
+        else:
+           specresolution = self.specres   
         
         if self.freecont:
-           continuum = p[0]
+           if self.freespecres:
+              continuum = p[1]
+           else:
+              continuum = p[0]   
         else:
            continuum = self.contval
         
@@ -376,7 +393,7 @@ class hires_fitter:
             
         #return the re-normalized model normalized by continuum
         if self.specres > self.velstep:
-             specmodel_conv = lsc.convolve_psf(specmodel, self.specres/self.velstep, boundary='wrap')
+             specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
         else:
              return specmodel*continuum
@@ -388,7 +405,10 @@ class hires_fitter:
         Wtot = 0
 
         if self.freecont:
-           cont = p[0]
+           if self.freespecres:
+             cont = p[1]
+           else:
+             cont = p[0]  
         else:
            cont = self.contval
         
@@ -406,7 +426,7 @@ class hires_fitter:
     
     def calc_N(self, p):
         
-        #Calculate rest frame equivalent width of the 
+        #Calculate column density of the 
         #absorption profile
         Ntot = 0
 
@@ -524,10 +544,10 @@ def readconfig(configfile=None, logger=None):
     else:
         coldef = input_params.get('input', 'coldef').split(',') 
     
-    if not input_params.has_option('input', 'specres'):
-        specres = 7.0
+    if input_params.has_option('input', 'specres'):
+       specres =  np.array(input_params.get('input', 'specres').split(','), dtype=float)
     else:
-        specres = float(input_params.get('input', 'specres')[0])        
+       specres = np.array((7.0), dtype=float)
 
     if input_params.has_option('input', 'asymmlike'):
         asymmlike = booldir[input_params.get('input', 'asymmlike')]
