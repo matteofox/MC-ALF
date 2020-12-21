@@ -172,7 +172,7 @@ if configpars['doplot']:
               
               AIC_existing.append(AIC)
               Ncomp_existing.append(comp)
-              
+                            
               print('{0:02}+{1:02} Components: Ln(z): {2:6.3f}, Ln(L): {3:6.3f}, Chi2: {5:6.3f}, AIC: {4:6.3f}'.format(comp, temp.nfill, lnz, lnlhood, AIC, chi2))
                               
               if comp in plotrange:

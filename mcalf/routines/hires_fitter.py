@@ -73,7 +73,7 @@ class hires_fitter:
         self.velstep = np.nanmedian((self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight)
         
         # read in lines from database
-        linelist = LineList('Strong', verbose=False)
+        linelist = LineList('ISM', verbose=False)
         
         #Extract line parameters from database, raise error if not found
         self.numlines = len(fitlines)
@@ -119,7 +119,7 @@ class hires_fitter:
         self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
      
         #Define start and ending indices for lines of interest
-        self.starind = 0
+        self.startind = 0
         
         if self.freecont:
            self.startind += 1
@@ -136,7 +136,7 @@ class hires_fitter:
         #Define bounds
         self.bounds = []
         if self.freespecres:
-          self.bounds.appen(self.res_lims)
+          self.bounds.append(self.res_lims)
         if self.freecont:
           self.bounds.append(self.cont_lims)
         for ii in range(self.ncomp):
@@ -186,10 +186,9 @@ class hires_fitter:
     
     def chi2(self,p):
         
-        #reconstruct the spectrum first    
-                
+        #reconstruct the spectrum first                   
         model_spec = self.reconstruct_spec(p)
-        
+                
         if np.all(model_spec == 0.):
             return +np.inf, []
         
@@ -338,7 +337,7 @@ class hires_fitter:
            specmodel *= voigt
             
         #return the re-normalized model multipled by continuum
-        if self.specres > self.velstep:
+        if specresolution > self.velstep:
              specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
         else:
@@ -352,7 +351,7 @@ class hires_fitter:
         specmodel *= voigt
             
         #return the re-normalized model + emission lines
-        if self.specres > self.velstep:
+        if specresolution > self.velstep:
              specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
         else:
@@ -392,7 +391,7 @@ class hires_fitter:
               specmodel *= voigt
             
         #return the re-normalized model normalized by continuum
-        if self.specres > self.velstep:
+        if specresolution > self.velstep:
              specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
              return specmodel_conv*continuum
         else:
@@ -480,13 +479,12 @@ def pc_analyzer(filesbasename, return_sorted=True):
    if return_sorted:
       
       postsorted = np.zeros_like(postsamples) 
-      if np.max(postsamples[:,0]) < 2:
-         startind = 1
-      else:
-         startind = 0   
+      ncols= len(postsorted[0])
+      startind = ncols %3
+      
       for ii in range(len(postsamples[:,0])):
          if startind>0:
-            postsorted[ii,0] = postsamples[ii,0]
+            postsorted[ii,0:startind] = postsamples[ii,0:startind]
          zsort = np.argsort(postsamples[ii,startind+1::3])
          for jj in range(len(zsort)):
                 postsorted[ii,3*jj+startind:3*jj+3+startind] = postsamples[ii,3*zsort[jj]+[0,1,2]+startind]
