@@ -27,7 +27,7 @@ class als_fitter:
         """ Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
         """
-        
+                
        #input information of the galaxy to be fitted
         self.debug = debug
         self.specfile = specfile
@@ -567,7 +567,7 @@ def readconfig(configfile=None, logger=None):
     if input_params.has_option('input', 'specres'):
        specres =  np.array(input_params.get('input', 'specres').split(','), dtype=float)
     else:
-       specres = np.array((7.0), dtype=float)
+       specres = np.array(([7.0]), dtype=float)
 
     if input_params.has_option('input', 'asymmlike'):
         asymmlike = booldir[input_params.get('input', 'asymmlike')]
@@ -619,7 +619,7 @@ def readconfig(configfile=None, logger=None):
     if input_params.has_option('components', 'contval'):
        contval =  np.array(input_params.get('components', 'contval').split(','), dtype=float)
     else:
-       contval = np.array((1))
+       contval = np.array([1])
        
     if input_params.has_option('components', 'Nrange'):
        Nrange = np.array(input_params.get('components', 'Nrange').split(','), dtype=float)
