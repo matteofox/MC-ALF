@@ -66,9 +66,11 @@ if __name__ == "__main__":
                     numpy.get_include(),
                    ]
 
-    py_major = sys.version_info[0]
 
-    scripts = ['scripts/mc-alf{}'.format(py_major)]  
+    if sys.version_info[0] < 3:
+      raise Exception("This codes requires Python3")
+
+    scripts = ['scripts/mc-alf3']  
     
     cmdclass = {'clean': CleanCommand}
     

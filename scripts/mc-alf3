@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from __future__ import print_function
+   
 import numpy as np
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
@@ -35,7 +36,7 @@ if configpars['dofit']:
 
     for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
         
-        with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
+        with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
@@ -137,7 +138,7 @@ if configpars['doplot']:
         for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
           if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(comp, configpars['nfill'])+'_equal_weights.txt'): 
             
-            with fitter.hires_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
+            with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \

@@ -5,9 +5,11 @@ import glob, os, shutil, socket, warnings
 import string, gc, time, copy
 import datetime
 import astropy.units as u
+from astropy.convolution import convolve, Gaussian1DKernel
+from scipy.signal import convolve as scipy_convolve
 from linetools.lists.linelist import LineList
-from linetools.spectra import convolve as lsc
 from scipy.special import wofz
+from astropy.stats import sigma_clipped_stats
 
 try:
     import configparser
@@ -16,7 +18,7 @@ except(ImportError):
 
 warnings.filterwarnings("ignore")
 
-class hires_fitter:
+class als_fitter:
 
     def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=[7.0], contval=[1.0], Nrange=[11.5,16], \
                  brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], \
@@ -48,7 +50,7 @@ class hires_fitter:
            self.freespecres = True
         else:
            self.freespecres = False
-       
+
         #constants
         self.small_num = 1e-70
         self.clight  = 2.9979245e5 #km/s
@@ -70,7 +72,10 @@ class hires_fitter:
         self.obj_noise = obj_noise[okrange]
         self.obj_wl = obj_wl[okrange]
         
-        self.velstep = np.nanmedian((self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight)
+        velsteps = (self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight
+        mn, med, stddev = sigma_clipped_stats(velsteps)
+        
+        self.velstep = med
         
         # read in lines from database
         linelist = LineList('ISM', verbose=False)
@@ -147,7 +152,7 @@ class hires_fitter:
           self.bounds.append(self.N_lims_fill)
           self.bounds.append(self.z_lims_fill)
           self.bounds.append(self.b_lims_fill)
-          
+        
         self.ndim = len(self.bounds)  
                           
     def _scale_cube_pc(self, cube):
@@ -238,7 +243,6 @@ class hires_fitter:
     def lnlhood_worker(self, p):
 
         #reconstruct the spectrum first    
-                
         model_spec = self.reconstruct_spec(p)
         
         ispec2 = 1./((self.obj_noise)**2)
@@ -338,7 +342,7 @@ class hires_fitter:
             
         #return the re-normalized model multipled by continuum
         if specresolution > self.velstep:
-             specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
+             specmodel_conv = self.convolve_model(specmodel, specresolution)
              return specmodel_conv*continuum
         else:
              return specmodel*continuum
@@ -352,7 +356,7 @@ class hires_fitter:
             
         #return the re-normalized model + emission lines
         if specresolution > self.velstep:
-             specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
+             specmodel_conv = self.convolve_model(specmodel, specresolution)
              return specmodel_conv*continuum
         else:
              return specmodel*continuum
@@ -392,10 +396,28 @@ class hires_fitter:
             
         #return the re-normalized model normalized by continuum
         if specresolution > self.velstep:
-             specmodel_conv = lsc.convolve_psf(specmodel, specresolution/self.velstep, boundary='wrap')
+             specmodel_conv = self.convolve_model(specmodel, specresolution)
              return specmodel_conv*continuum
         else:
              return specmodel*continuum
+    
+    
+    def convolve_model(self, spec, fwhm):
+    
+        sigma = (fwhm / 2.354820) / self.velstep
+        # gaussian drops to 1/100 of maximum value at x =
+        # sqrt(2*ln(100))*sigma, so number of pixels to include from
+        # centre of gaussian is:
+        n = np.ceil(3.0348 * sigma)
+        x_size = int(2*n) + 1 
+        #return scipy_convolve(spec, Gaussian1DKernel(sigma, x_size=x_size),
+        #                mode='same', method='direct')
+
+        return convolve(spec, Gaussian1DKernel(sigma, x_size=x_size),
+                        boundary='wrap', normalize_kernel=True)
+    
+    
+    
     
     def calc_w(self, p, lineid=0):
         
