@@ -40,8 +40,8 @@ if configpars['dofit']:
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
-                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike'], \
-                                 debug= args.debug) as temp:
+                                 brangefill=configpars['brangefill'], wrangefill=configpars['wrangefill'], \
+                                 Asymmlike=configpars['asymmlike'], debug= args.debug) as temp:
 
            if configpars['solver'] == 'polychord':
               
@@ -218,17 +218,22 @@ if configpars['doplot']:
                        if _z<10:
                           color = 'dodgerblue'
                           spec1 = temp.reconstruct_onecomp(specresolution, continuum, _N, _z, _b)
+                          
+                          #Plot ticks at component positions, needs to be done for all 
+                          #transitions in the plotted range
+                          for trans in range(temp.numlines):
+                             wave = temp.linepars[trans]['wrest'].value*(1+_z)
+                             ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='blue')
+                          
                        else:
                           color = 'salmon' 
                           spec1 = temp.reconstruct_onecomp_fill(specresolution, continuum, _N, _z, _b)  
-                       
+                          
+                          wave = temp.linefill['wrest'].value*(1+_z)
+                          ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='red')
+
                        ax[rowind,colind].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
                        
-                       #Plot ticks at component positions, needs to be done for all 
-                       #transitions in the plotted range
-                       for trans in range(temp.numlines):
-                         wave = temp.linepars[trans]['wrest'].value*(1+_z)
-                         ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='red')
         
                  fig.tight_layout()
                  #pl.show()

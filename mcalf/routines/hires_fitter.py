@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore")
 class als_fitter:
 
     def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=[7.0], contval=[1.0], Nrange=[11.5,16], \
-                 brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], coldef=['Wave', 'Flux', 'Err'], \
+                 brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], wrangefill=None, coldef=['Wave', 'Flux', 'Err'], \
                  Gpriors=None, Asymmlike=False, debug=False):
         
         """ Class for dealing with MultiNest fitting
@@ -102,9 +102,13 @@ class als_fitter:
         self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
         self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
         
-        #For fillers they can be anywhere
-        self.zmin_fill = ((np.min(obj_wl)+0.25)/self.linefill['wrest'].value)-1.
-        self.zmax_fill = ((np.max(obj_wl)-0.25)/self.linefill['wrest'].value)-1.
+        #For fillers they can be anywhere unless wrangefill is set
+        if wrangefill is not None:
+          self.zmin_fill = (wrangefill[0]/self.linefill['wrest'].value)-1.
+          self.zmax_fill = (wrangefill[1]/self.linefill['wrest'].value)-1.
+        else:
+          self.zmin_fill = ((np.min(obj_wl)+0.25)/self.linefill['wrest'].value)-1.
+          self.zmax_fill = ((np.max(obj_wl)-0.25)/self.linefill['wrest'].value)-1.
         
         #set up parameter limits
         self.cont_lims = np.array(contval)
@@ -646,6 +650,11 @@ def readconfig(configfile=None, logger=None):
     else:
        brangefill = np.array((1,30))
        
+    if input_params.has_option('components', 'wrangefill'):
+       wrangefill = np.array(input_params.get('components', 'wrangefill').split(','), dtype=float)
+    else:
+       wrangefill = None
+       
     if input_params.has_option('plots', 'nmaxcols'):
        nmaxcols = int(input_params.get('plots', 'nmaxcols')[0])
     else:
@@ -681,6 +690,7 @@ def readconfig(configfile=None, logger=None):
                   'zrange'    : zrange,
                   'Nrangefill': Nrangefill,
                   'brangefill': brangefill,
+                  'wrangefill': wrangefill,
                   'contval'   : contval,
                   'nmaxcols'  : nmaxcols,
                   'dofit'     : dofit,
