@@ -78,7 +78,7 @@ class als_fitter:
         self.velstep = med
         
         # read in lines from database
-        linelist = LineList('ISM', verbose=False)
+        linelist = LineList('ISM', verbose=False)       
         
         #Extract line parameters from database, raise error if not found
         self.numlines = len(fitlines)
@@ -89,7 +89,20 @@ class als_fitter:
                print('ERROR: Line {} not found in database. Aborting.'.format(self.fitlines[i]))
                return 0
             else:
+               #Update values for CrII from atomic database in RCooke ALIS code
+               if self.fitlines[i] == 'CrII 2066':
+                  temp['f'] = 0.0512
+                  temp['gamma'] = 4.17E8 /u.s
+               if self.fitlines[i] == 'CrII 2062':
+                  temp['f'] = 0.0759
+                  temp['gamma'] = 4.06E8 /u.s
+               if self.fitlines[i] == 'CrII 2056':
+                  temp['f'] = 0.103
+                  temp['gamma'] = 4.07E8 /u.s
+               
+               #Finally store
                linepars.append(temp)
+   
         
         self.linepars = copy.deepcopy(linepars)
         
@@ -97,18 +110,6 @@ class als_fitter:
         #to avoid chaning the column density limits, but the wave is set to 1000A arbitrarily.
         self.linefill = copy.deepcopy(linepars[0])
         self.linefill['wrest'] = 250 *u.angstrom
-        
-        #If fitting multiplets the z range spans the spectrum where the first line is expected
-        self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
-        self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
-        
-        #For fillers they can be anywhere unless wrangefill is set
-        if wrangefill is not None:
-          self.zmin_fill = (wrangefill[0]/self.linefill['wrest'].value)-1.
-          self.zmax_fill = (wrangefill[1]/self.linefill['wrest'].value)-1.
-        else:
-          self.zmin_fill = ((np.min(obj_wl)+0.25)/self.linefill['wrest'].value)-1.
-          self.zmax_fill = ((np.max(obj_wl)-0.25)/self.linefill['wrest'].value)-1.
         
         #set up parameter limits
         self.cont_lims = np.array(contval)
@@ -123,10 +124,28 @@ class als_fitter:
         if zrange is not None:
           self.z_lims = zrange
         else:
+          #If fitting multiplets the z range spans the spectrum where the first line is expected
+          self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
+          self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
           self.z_lims = np.array((self.zmin, self.zmax))
         
-        self.z_lims_fill = np.array((self.zmin_fill, self.zmax_fill))
-     
+        #For fillers they can be anywhere unless wrangefill is set
+        self.z_lims_fill = []
+        for zz in range(self.nfill):
+          if wrangefill is None:
+            zmin_fill = ((np.min(self.obj_wl)+0.25)/self.linefill['wrest'].value)-1.
+            zmax_fill = ((np.max(self.obj_wl)-0.25)/self.linefill['wrest'].value)-1.
+          elif len(wrangefill) == 2:
+            zmin_fill = (wrangefill[0]/self.linefill['wrest'].value)-1.
+            zmax_fill = (wrangefill[1]/self.linefill['wrest'].value)-1.
+          elif len(wrangefill) == 2*self.nfill:
+            zmin_fill = (wrangefill[2*zz+0]/self.linefill['wrest'].value)-1.
+            zmax_fill = (wrangefill[2*zz+1]/self.linefill['wrest'].value)-1.
+          else:
+            print('Wrangefill keyword not understood. Aborting.')
+            return 0
+          self.z_lims_fill.append(np.array((zmin_fill, zmax_fill)))
+
         #Define start and ending indices for lines of interest
         self.startind = 0
         
@@ -154,7 +173,7 @@ class als_fitter:
           self.bounds.append(self.b_lims)
         for ii in range(self.nfill):
           self.bounds.append(self.N_lims_fill)
-          self.bounds.append(self.z_lims_fill)
+          self.bounds.append(self.z_lims_fill[ii])
           self.bounds.append(self.b_lims_fill)
         
         self.ndim = len(self.bounds)  

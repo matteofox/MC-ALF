@@ -142,7 +142,7 @@ if configpars['doplot']:
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
-                                 brangefill=configpars['brangefill'], Asymmlike=configpars['asymmlike'], \
+                                 brangefill=configpars['brangefill'], wrangefill=configpars['wrangefill'], Asymmlike=configpars['asymmlike'], \
                                  debug=args.debug) as temp:
                           
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(comp, temp.nfill), return_sorted=True)
