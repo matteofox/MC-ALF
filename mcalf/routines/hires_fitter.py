@@ -121,13 +121,33 @@ class als_fitter:
         self.b_lims = np.array(brange)
         self.b_lims_fill = np.array(brangefill)
         
-        if zrange is not None:
-          self.z_lims = zrange
-        else:
-          #If fitting multiplets the z range spans the spectrum where the first line is expected
-          self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
-          self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
-          self.z_lims = np.array((self.zmin, self.zmax))
+        #For fillers they can be anywhere unless wrangefill is set
+        self.z_lims = []
+        for zz in range(self.ncomp):
+          if zrange is None:
+            #If fitting multiplets the z range spans the spectrum where the first line is expected
+            zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
+            zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
+          elif len(zrange) == 2:
+            zmin = zrange[0]
+            zmax = zrange[1]
+          elif len(wrangefill) == 2*self.ncomp:
+            zmin = zrange[2*zz+0]
+            zmax = zrange[2*zz+1]
+          else:
+            print('Zrange keyword not understood. Aborting.')
+            return 0
+          self.z_lims.append(np.array((zmin, zmax)))
+        
+        
+        
+        #if zrange is not None:
+        #  self.z_lims = zrange
+        #else:
+        #  #If fitting multiplets the z range spans the spectrum where the first line is expected
+        #  self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
+        #  self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
+        #  self.z_lims = np.array((self.zmin, self.zmax))
         
         #For fillers they can be anywhere unless wrangefill is set
         self.z_lims_fill = []
@@ -169,7 +189,7 @@ class als_fitter:
           self.bounds.append(self.cont_lims)
         for ii in range(self.ncomp):
           self.bounds.append(self.N_lims)
-          self.bounds.append(self.z_lims)
+          self.bounds.append(self.z_lims[ii])
           self.bounds.append(self.b_lims)
         for ii in range(self.nfill):
           self.bounds.append(self.N_lims_fill)
@@ -678,6 +698,11 @@ def readconfig(configfile=None, logger=None):
        nmaxcols = int(input_params.get('plots', 'nmaxcols')[0])
     else:
        nmaxcols = 5
+
+    if input_params.has_option('plots', 'yrange'):
+       yrange = np.array(input_params.get('plots', 'yrange').split(','), dtype=float)
+    else:
+       yrange = np.array((-0.1,1.2))
     
     #Parameters driving the run
     if input_params.has_option('run', 'dofit'):
@@ -712,6 +737,7 @@ def readconfig(configfile=None, logger=None):
                   'wrangefill': wrangefill,
                   'contval'   : contval,
                   'nmaxcols'  : nmaxcols,
+                  'yrange'    : yrange,
                   'dofit'     : dofit,
                   'doplot'    : doplot}
                   

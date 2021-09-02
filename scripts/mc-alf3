@@ -14,6 +14,7 @@ from mpi4py import MPI
 from mcalf.routines import hires_fitter as fitter
 
 pl.rc('text', usetex=True)
+pl.rcParams['font.size'] = 20
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--debug', action='store_true')
@@ -204,6 +205,7 @@ if configpars['doplot']:
                    ax[rowind,colind].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
                    ax[rowind,colind].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
                    ax[rowind,colind].set_xlim(configpars['wavefit'][waverange])
+                   ax[rowind,colind].set_ylim(configpars['yrange'])
                            
                    for ii in rsamples:
                        tsamp = values[ii,:]
