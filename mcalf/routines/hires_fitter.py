@@ -131,7 +131,7 @@ class als_fitter:
           elif len(zrange) == 2:
             zmin = zrange[0]
             zmax = zrange[1]
-          elif len(wrangefill) == 2*self.ncomp:
+          elif len(zrange) >= 2*self.ncomp:
             zmin = zrange[2*zz+0]
             zmax = zrange[2*zz+1]
           else:
@@ -139,8 +139,7 @@ class als_fitter:
             return 0
           self.z_lims.append(np.array((zmin, zmax)))
         
-        
-        
+       
         #if zrange is not None:
         #  self.z_lims = zrange
         #else:
@@ -195,6 +194,8 @@ class als_fitter:
           self.bounds.append(self.N_lims_fill)
           self.bounds.append(self.z_lims_fill[ii])
           self.bounds.append(self.b_lims_fill)
+        
+        print(self.bounds)
         
         self.ndim = len(self.bounds)  
                           
@@ -616,7 +617,7 @@ def readconfig(configfile=None, logger=None):
         asymmlike = booldir[input_params.get('input', 'asymmlike')]
     else:
         asymmlike = False       
-    
+        
     if input_params.has_option('input', 'solver'):
         solver = input_params.get('input', 'solver')
     else:
