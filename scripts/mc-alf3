@@ -35,9 +35,7 @@ if MPI.COMM_WORLD.rank==0:
 
 if configpars['dofit']:
 
-    for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
-        
-        with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
+        with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], configpars['ncomp'], \
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
@@ -50,7 +48,7 @@ if configpars['dofit']:
               from pypolychord.settings import PolyChordSettings
               
               settings = PolyChordSettings(temp.ndim, 0)
-              settings.file_root = configpars['chainfmt'].format(comp, configpars['nfill'])
+              settings.file_root = configpars['chainfmt'].format(configpars['nfill'])
               settings.base_dir = configpars['chaindir']
            
               if 'pcsettings' in configpars:
@@ -69,14 +67,53 @@ if configpars['dofit']:
                  settings.posteriors    = configsettings['posteriors']
                  settings.cluster_posteriors = configsettings['cluster_posteriors']
            
-              #| Run PolyChord
+              # Run PolyChord
            
               t0 = datetime.datetime.now()
               output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
               t1 = datetime.datetime.now()
               if MPI.COMM_WORLD.rank==0:
                  print('Execution time {}'.format(t1-t0))
-            
+           
+           elif configpars['solver'] == 'dypolychord':
+               
+               import dyPolyChord.pypolychord_utils
+               import dyPolyChord
+               from pypolychord.settings import PolyChordSettings
+               
+               
+               settings_dict = {'file_root': configpars['chainfmt'].format(configpars['nfill']),
+                                'base_dir': configpars['chaindir'],
+                                'nlive': 100} 
+               
+               dynamic_goal = 0.25 # whether to maximise parameter estimation or evidence accuracy.
+               
+               if 'pcsettings' in configpars:
+                 configsettings = configpars['pcsettings']
+                 settings_dict['nlive'] = int(configsettings['nlive'])
+                 settings_dict['num_repeats']   = int(configsettings['num_repeats'])
+                 settings_dict['precision_criterion'] = float(configsettings['precision_criterion'])
+                 settings_dict['feedback']      = 0
+                 settings_dict['do_clustering'] = configsettings['do_clustering']
+                 settings_dict['equals']        = configsettings['equals']
+                 settings_dict['read_resume']   = configsettings['read_resume']
+                 settings_dict['write_resume']  = configsettings['write_resume']
+                 settings_dict['write_live']    = configsettings['write_live']
+                 settings_dict['write_dead']    = configsettings['write_dead']
+                 settings_dict['write_prior']   = configsettings['write_prior']
+                 settings_dict['posteriors']    = configsettings['posteriors']
+                 settings_dict['cluster_posteriors'] = configsettings['cluster_posteriors']
+                 dynamic_goal                   = float(configsettings['dynamic_goal'])
+               
+               # Make a callable for running PolyChord
+               pypolychord_callable = dyPolyChord.pypolychord_utils.RunPyPolyChord(temp.lnlhood_pc, temp._scale_cube_pc, temp.ndim)
+
+               # Run dyPolyChord
+               dyPolyChord.run_dypolychord(pypolychord_callable, dynamic_goal, settings_dict,
+                                           ninit=int(settings_dict['nlive']/5), nlive_const=int(settings_dict['nlive']),
+                                           comm=MPI.COMM_WORLD)
+               
+             
            elif configpars['solver'] == 'multinest':
               
               import pymultinest
@@ -129,27 +166,21 @@ if configpars['doplot']:
      #This can only be one on one core....
                              
      if MPI.COMM_WORLD.rank==0:
-        #First evaluate evidence as a function of number of components
-        Ncomp_existing = []
-        AIC_existing = []
-        
         print('Analyzing run: '+configpars['chainfmt'].format('',''))
-        plotrange= np.arange(1,50)
         
-        for comp in range(configpars['ncomp'][0],configpars['ncomp'][1]+1):
-          if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(comp, configpars['nfill'])+'_equal_weights.txt'): 
+        if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(configpars['nfill'])+'_equal_weights.txt'): 
             
-            with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], comp, \
+            with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], configpars['ncomp'], \
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
                                  brangefill=configpars['brangefill'], wrangefill=configpars['wrangefill'], Asymmlike=configpars['asymmlike'], \
                                  debug=args.debug) as temp:
                           
-              lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(comp, temp.nfill), return_sorted=True)
+              lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(temp.nfill), return_sorted=True)
               
               #Define parameter names
-              parameters = fitter.get_parnames(temp.ncomp+temp.nfill, temp.freecont)
+              parameters = fitter.get_parnames(temp.ncompmax+temp.nfill, temp.freecont)
         
               meds = np.percentile(values, 50, axis=0) 
               percs = np.transpose(np.percentile(values, [16,50,84], axis=0))
@@ -166,89 +197,89 @@ if configpars['doplot']:
                  specresolution = meds[0]
               else:
                  specresolution = temp.specres   
-                            
+              
+              ncomp_arr, ncomp_counts = np.unique(values[:,temp.startind], return_counts=True)
+              ncomp_counts = 1.*ncomp_counts/np.sum(ncomp_counts)
+              
               #Calc median likelihood across posterior
               lnlhood = np.percentile(lhoodval, 50)
               AIC = 2*temp.ndim-2*lnlhood
               chi2 = temp.chi2(meds)
+              statstring = r'$\ln(z): {0:6.3f},~\ln(L): {1:6.3f},~\chi^2: {2:6.3f},~AIC: {3:6.3f}$'.format(lnz, lnlhood, AIC, chi2)
               
-              AIC_existing.append(AIC)
-              Ncomp_existing.append(comp)
-                            
-              print('{0:02}+{1:02} Components: Ln(z): {2:6.3f}, Ln(L): {3:6.3f}, Chi2: {5:6.3f}, AIC: {4:6.3f}'.format(comp, temp.nfill, lnz, lnlhood, AIC, chi2))
-                              
-              if comp in plotrange:
+              #{0:02d}
+              print('________________________________________________________________' )             
+              print('| Ln(z): {0:6.3f}, Ln(L): {1:6.3f}, Chi2: {2:6.3f}, AIC: {3:6.3f}'.format(lnz, lnlhood, AIC, chi2))
+              for cc in range(len(ncomp_arr)):
+                print('| Ncomp: {0:02d} Occurrence Fraction: {1:4.3f}'.format(int(ncomp_arr[cc]), ncomp_counts[cc]))
+              print('|_______________________________________________________________' )             
                  
-                 nrows = (temp.numfitranges // configpars['nmaxcols'] )
-                 if temp.numfitranges % configpars['nmaxcols'] > 0:
-                    nrows += 1
+              nrows = (temp.numfitranges // configpars['nmaxcols'] )
+              if temp.numfitranges % configpars['nmaxcols'] > 0:
+                 nrows += 1
+                 
+              if nrows == 1:
+                 ncols = temp.numfitranges
+              else:
+                 ncols = configpars['nmaxcols']   
+                                               
+              figsize = (10*ncols,5.5*nrows)
+              fig, ax = pl.subplots(nrows=int(nrows), ncols=int(ncols), sharey=True, figsize=figsize, squeeze=False)
+              
+              
+              nsamp = min([len(values),100])
+              if nsamp< 100:
+                 rsamples = np.arange(nsamp)
+              else:
+                 rsamples = np.random.randint(values.shape[0], size=nsamp)
+              
+              for waverange in range(temp.numfitranges):
+                
+                colind = int(waverange % configpars['nmaxcols'])
+                rowind = int(waverange / configpars['nmaxcols'])
+                
+                ax[rowind,colind].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
+                ax[rowind,colind].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
+                ax[rowind,colind].set_xlim(configpars['wavefit'][waverange])
+                ax[rowind,colind].set_ylim(configpars['yrange'])
+                        
+                for ii in rsamples:
+                    tsamp = values[ii,:]
+                    tspec = temp.reconstruct_spec(tsamp)
                     
-                 if nrows == 1:
-                    ncols = temp.numfitranges
-                 else:
-                    ncols = configpars['nmaxcols']   
-                                                  
-                 figsize = (10*ncols,5*nrows)
-                 fig, ax = pl.subplots(nrows=int(nrows), ncols=int(ncols), sharey=True, figsize=figsize, squeeze=False)
-                 
-                 nsamp = min([len(values),100])
-                 if nsamp< 100:
-                    rsamples = np.arange(nsamp)
-                 else:
-                    rsamples = np.random.randint(values.shape[0], size=nsamp)
-                 
-                 for waverange in range(temp.numfitranges):
-                   
-                   colind = int(waverange % configpars['nmaxcols'])
-                   rowind = int(waverange / configpars['nmaxcols'])
-                   
-                   ax[rowind,colind].step(temp.obj_wl, temp.obj, color='black', where='mid', lw=1)
-                   ax[rowind,colind].plot(temp.obj_wl, temp.obj_noise, '-b', lw=0.5)
-                   ax[rowind,colind].set_xlim(configpars['wavefit'][waverange])
-                   ax[rowind,colind].set_ylim(configpars['yrange'])
-                           
-                   for ii in rsamples:
-                       tsamp = values[ii,:]
-                       tspec = temp.reconstruct_spec(tsamp)
-                       
-                       ax[rowind,colind].plot(temp.obj_wl, tspec, color='red', alpha=1-8E-3*nsamp, lw=2-1.7E-2*nsamp, rasterized=False)
+                    ax[rowind,colind].plot(temp.obj_wl, tspec, color='red', alpha=1-8E-3*nsamp, lw=2-1.7E-2*nsamp, rasterized=False)
 
-                   for i in range(temp.ncomp+temp.nfill):
-                       
-                       _N, _z, _b = meds[3*i+temp.startind+np.arange(3)]
-                       
-                       if _z<10:
-                          color = 'dodgerblue'
-                          spec1 = temp.reconstruct_onecomp(specresolution, continuum, _N, _z, _b)
-                          
-                          #Plot ticks at component positions, needs to be done for all 
-                          #transitions in the plotted range
-                          for trans in range(temp.numlines):
-                             wave = temp.linepars[trans]['wrest'].value*(1+_z)
-                             ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='blue')
-                          
-                       else:
-                          color = 'salmon' 
-                          spec1 = temp.reconstruct_onecomp_fill(specresolution, continuum, _N, _z, _b)  
-                          
-                          wave = temp.linefill['wrest'].value*(1+_z)
-                          ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='red')
-
-                       ax[rowind,colind].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
-                       
-        
-                 fig.tight_layout()
-                 #pl.show()
-                 pl.savefig(configpars['plotdir']+configpars['chainfmt'].format(comp, temp.nfill)+'.pdf')
-
-
-        Ncomp_existing = np.array(Ncomp_existing)
-        AIC_existing = np.array(AIC_existing)
-        lnAICratio = 0.5*(np.min(AIC_existing)-AIC_existing)
-        
-        okmodels = (lnAICratio>-5) #Odds ratio of 150
-        okstr = ''
-        for jj in range(okmodels.sum()):
-            okstr += '{} '.format(Ncomp_existing[okmodels][jj])
+                for i in range(temp.ncompmax+temp.nfill):
                     
-        print('Models to be considered for the analysis: '+okstr)
+                    _thisNcomp = meds[temp.startind]
+                    _N, _z, _b = meds[1+3*i+temp.startind+np.arange(3)]
+                    
+                    if _z<10 and i<=_thisNcomp:
+                       color = 'dodgerblue'
+                       spec1 = temp.reconstruct_onecomp(specresolution, continuum, _N, _z, _b)
+                       
+                       #Plot ticks at component positions, needs to be done for all 
+                       #transitions in the plotted range
+                       for trans in range(temp.numlines):
+                          wave = temp.linepars[trans]['wrest'].value*(1+_z)
+                          ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='blue')
+                       
+                    else:
+                       color = 'salmon' 
+                       spec1 = temp.reconstruct_onecomp_fill(specresolution, continuum, _N, _z, _b)  
+                       
+                       wave = temp.linefill['wrest'].value*(1+_z)
+                       ax[rowind,colind].plot([wave, wave], [1.06, 1.10], color='red')
+
+                    ax[rowind,colind].plot(temp.obj_wl, spec1, color=color, ls='dotted', lw=0.8, zorder=1)
+                    
+        
+              fig.tight_layout()
+              
+              #pl.show()
+              pl.subplots_adjust(top=0.91)
+              pl.text(0.04,0.93,statstring,ha='left', transform=fig.transFigure)
+              
+              pl.savefig(configpars['plotdir']+configpars['chainfmt'].format(temp.nfill)+'.pdf')
+              print('PDF written at: {}'.format(configpars['plotdir']+configpars['chainfmt'].format(temp.nfill)+'.pdf'))
+              print('End of Job.')
