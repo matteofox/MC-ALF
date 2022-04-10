@@ -182,9 +182,9 @@ if configpars['doplot']:
               #Define parameter names
               parameters = fitter.get_parnames(temp.ncompmax+temp.nfill, temp.freecont)
         
-              meds = np.percentile(values, 50, axis=0) 
-              percs = np.transpose(np.percentile(values, [16,50,84], axis=0))
-        
+              meds = np.nanpercentile(values, 50, axis=0) 
+              percs = np.transpose(np.nanpercentile(values, [16,50,84], axis=0))
+              
               if len(temp.contval)>1:
                  if len(temp.specres)>1:
                    continuum = meds[1]
@@ -213,7 +213,9 @@ if configpars['doplot']:
               for cc in range(len(ncomp_arr)):
                 print('| Ncomp: {0:02d} Occurrence Fraction: {1:4.3f}'.format(int(ncomp_arr[cc]), ncomp_counts[cc]))
               print('|_______________________________________________________________' )             
-                 
+              
+              map_ncomp = int(ncomp_arr[np.argmax(ncomp_counts)])
+                               
               nrows = (temp.numfitranges // configpars['nmaxcols'] )
               if temp.numfitranges % configpars['nmaxcols'] > 0:
                  nrows += 1
@@ -251,10 +253,9 @@ if configpars['doplot']:
 
                 for i in range(temp.ncompmax+temp.nfill):
                     
-                    _thisNcomp = meds[temp.startind]
                     _N, _z, _b = meds[1+3*i+temp.startind+np.arange(3)]
                     
-                    if _z<10 and i<=_thisNcomp:
+                    if _z<10 and i<=map_ncomp:
                        color = 'dodgerblue'
                        spec1 = temp.reconstruct_onecomp(specresolution, continuum, _N, _z, _b)
                        

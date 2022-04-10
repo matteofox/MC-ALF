@@ -553,13 +553,19 @@ def pc_analyzer(filesbasename, return_sorted=True):
       startind = (ncols-1) %3
       
       for ii in range(len(postsamples[:,0])):
-         #postsorted[ii,0:startind+1] = postsamples[ii,0:startind+1] #Ncomp does not need to be sorted or swapped in place
+         
          thisncomp = int(postsamples[ii,startind])
          thisendind = startind+1+3*thisncomp
+         
+         #Set all values above thisncomp to 99 both in original array and in sorted one
+         postsamples[ii,thisendind:] = 99
+         postsorted[ii,thisendind:] = 99
+         
          zsort = np.argsort(postsamples[ii,startind+2:startind+1+3*thisncomp:3])
          for jj in range(len(zsort)):
                 postsorted[ii,3*jj+startind+1:3*jj+3+startind+1] = postsamples[ii,3*zsort[jj]+[0,1,2]+startind+1]
-
+         
+         postsorted[postsorted==99] = np.nan
             
       return lnz, lnz_err, lhoodsamples, postsorted
    else:
@@ -771,4 +777,5 @@ def readconfig(configfile=None, logger=None):
 
     return run_params
 
+#b /cosma/home/durham/dc-foss1/.local/lib/python3.7/site-packages/mc_alf-0.99-py3.7.egg/mcalf/routines/hires_fitter.py:558
 
