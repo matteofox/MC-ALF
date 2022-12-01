@@ -39,7 +39,8 @@ class als_fitter:
          print("Running asymmetric likelihood")
         self.specres = specres
         self.contval = contval
-        self.ncomp = ncomp
+        self.ncompmin = ncomp[0]
+        self.ncompmax = ncomp[1]
         self.nfill = nfill
         if len(contval)>1:
            self.freecont = True
@@ -106,7 +107,7 @@ class als_fitter:
         
         self.linepars = copy.deepcopy(linepars)
         
-        #Prepare te mplate to act as filler, we take this to be the same species being fit
+        #Prepare the template to act as filler, we take this to be the same species being fit
         #to avoid chaning the column density limits, but the wave is set to 1000A arbitrarily.
         self.linefill = copy.deepcopy(linepars[0])
         self.linefill['wrest'] = 250 *u.angstrom
@@ -123,7 +124,7 @@ class als_fitter:
         
         #For fillers they can be anywhere unless wrangefill is set
         self.z_lims = []
-        for zz in range(self.ncomp):
+        for zz in range(self.ncompmax):
           if zrange is None:
             #If fitting multiplets the z range spans the spectrum where the first line is expected
             zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
@@ -131,7 +132,7 @@ class als_fitter:
           elif len(zrange) == 2:
             zmin = zrange[0]
             zmax = zrange[1]
-          elif len(zrange) >= 2*self.ncomp:
+          elif len(zrange) >= 2*self.ncompmax:
             zmin = zrange[2*zz+0]
             zmax = zrange[2*zz+1]
           else:
@@ -165,7 +166,7 @@ class als_fitter:
             return 0
           self.z_lims_fill.append(np.array((zmin_fill, zmax_fill)))
 
-        #Define start and ending indices for lines of interest
+        #Define start and ending indices for lines of interest (first space is for ncomp)
         self.startind = 0
         
         if self.freecont:
@@ -173,7 +174,7 @@ class als_fitter:
         if self.freespecres:
            self.startind += 1
                 
-        self.endind   = self.startind+3*self.ncomp
+        self.endind   = self.startind+3*self.ncompmax+1
         
         #Find where the data is detected at 10 sigma
         gauss = np.random.normal(size=len(self.obj))
@@ -186,7 +187,9 @@ class als_fitter:
           self.bounds.append(self.res_lims)
         if self.freecont:
           self.bounds.append(self.cont_lims)
-        for ii in range(self.ncomp):
+          
+        self.bounds.append(ncomp) #This is a tuple
+        for ii in range(self.ncompmax):
           self.bounds.append(self.N_lims)
           self.bounds.append(self.z_lims[ii])
           self.bounds.append(self.b_lims)
@@ -195,8 +198,6 @@ class als_fitter:
           self.bounds.append(self.z_lims_fill[ii])
           self.bounds.append(self.b_lims_fill)
         
-        print(self.bounds)
-        
         self.ndim = len(self.bounds)  
                           
     def _scale_cube_pc(self, cube):
@@ -204,8 +205,9 @@ class als_fitter:
         cube2 = np.copy(cube)
         for ii in range(len(cube)):
             cube2[ii] = cube2[ii]*self.bounds[ii].ptp() + np.min(self.bounds[ii])
-        
-       
+            if ii == self.startind:
+               cube2[ii] = int(cube2[ii])
+
         return cube2
 
     def _scale_cube_mn(self, cube, ndim, nparam):
@@ -249,11 +251,11 @@ class als_fitter:
          
     def lnlhood_pc(self, p):
         
-        zind = (1+self.startind)+np.arange(self.ncomp)*3
-        
-        if self.ncomp<10:
-          if not all(p[zind] == np.sort(p[zind])):
-            return -np.inf, []
+        zind = 1+(1+self.startind)+np.arange(self.ncompmax)*3
+                
+        #if self.ncompmax<10:
+        #if not all(p[zind] == np.sort(p[zind])):
+        #    return -np.inf, []
         
         lhood =  self.lnlhood_worker(p)
         if self.debug:
@@ -263,22 +265,22 @@ class als_fitter:
     
     def lnlhood_dy(self, p):
         
-        zind = (1+self.startind)+np.arange(self.ncomp)*3
+        zind = 1+(1+self.startind)+np.arange(self.ncompmax)*3
         
-        if self.ncomp<10:
-          if not all(p[zind] == np.sort(p[zind])):
-            return -np.inf
+        #if self.ncompmax<10:
+        #  if not all(p[zind] == np.sort(p[zind])):
+        #    return -np.inf
         
         return  self.lnlhood_worker(p)
    
     def lnlhood_mn(self, p, ndim, nparam):
         
-        zind = (1+self.startind)+np.arange(self.ncomp)*3
+        zind = 1+(1+self.startind)+np.arange(self.ncompmax)*3
         parr = np.array([p[x] for x in range(ndim)])
         
-        if self.ncomp<10:
-          if not all(parr[zind] == np.sort(parr[zind])):
-            return -np.inf
+        #if self.ncompmax<10:
+        #  if not all(parr[zind] == np.sort(parr[zind])):
+        #    return -np.inf
         
         lhood =  self.lnlhood_worker(p)
         
@@ -423,9 +425,10 @@ class als_fitter:
            continuum = self.contval
         
         specmodel = np.ones_like(self.obj)
+        thisncomp = int(p[self.startind])
         
-        for comp in range(self.ncomp):
-            _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
+        for comp in range(thisncomp):
+            _N, _z, _b = p[1+3*comp+self.startind:1+3*comp+3+self.startind] #First one is for Ncomp in the fit
             
             for line in range(self.numlines):
                voigt=self.voigt_model(self.obj_wl, _N, _b, _z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
@@ -477,7 +480,7 @@ class als_fitter:
         else:
            cont = self.contval
         
-        for comp in range(self.ncomp):
+        for comp in range(self.ncompmax):
             _N, _z, _b = p[3*comp+self.startind:3*comp+3+self.startind]
             absorption=(np.zeros_like(self.obj)+cont)*self.voigt_model(self.obj_wl, _N, _b, _z, self.linepars[lineid]['wrest'].value, self.linepars[lineid]['f'], self.linepars[lineid]['gamma'].value) 
             
@@ -544,16 +547,25 @@ def pc_analyzer(filesbasename, return_sorted=True):
    
    if return_sorted:
       
-      postsorted = np.zeros_like(postsamples) 
+      print('Sorting components in redshift')
+      postsorted = np.copy(postsamples) 
       ncols= len(postsorted[0])
-      startind = ncols %3
+      startind = (ncols-1) %3
       
       for ii in range(len(postsamples[:,0])):
-         if startind>0:
-            postsorted[ii,0:startind] = postsamples[ii,0:startind]
-         zsort = np.argsort(postsamples[ii,startind+1::3])
+         
+         thisncomp = int(postsamples[ii,startind])
+         thisendind = startind+1+3*thisncomp
+         
+         #Set all values above thisncomp to 99 both in original array and in sorted one
+         postsamples[ii,thisendind:] = 99
+         postsorted[ii,thisendind:] = 99
+         
+         zsort = np.argsort(postsamples[ii,startind+2:startind+1+3*thisncomp:3])
          for jj in range(len(zsort)):
-                postsorted[ii,3*jj+startind:3*jj+3+startind] = postsamples[ii,3*zsort[jj]+[0,1,2]+startind]
+                postsorted[ii,3*jj+startind+1:3*jj+3+startind+1] = postsamples[ii,3*zsort[jj]+[0,1,2]+startind+1]
+         
+         postsorted[postsorted==99] = np.nan
             
       return lnz, lnz_err, lhoodsamples, postsorted
    else:
@@ -765,4 +777,5 @@ def readconfig(configfile=None, logger=None):
 
     return run_params
 
+#b /cosma/home/durham/dc-foss1/.local/lib/python3.7/site-packages/mc_alf-0.99-py3.7.egg/mcalf/routines/hires_fitter.py:558
 
