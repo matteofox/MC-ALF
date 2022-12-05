@@ -40,7 +40,7 @@ if configpars['dofit']:
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
                                  brangefill=configpars['brangefill'], wrangefill=configpars['wrangefill'], \
-                                 Asymmlike=configpars['asymmlike'], debug= args.debug) as temp:
+                                 Asymmlike=configpars['asymmlike'], oversample=configpars['oversample'], debug= args.debug) as temp:
 
            if configpars['solver'] == 'polychord':
               
@@ -166,6 +166,7 @@ if configpars['doplot']:
      #This can only be one on one core....
                              
      if MPI.COMM_WORLD.rank==0:
+     
         print('Analyzing run: '+configpars['chainfmt'].format('',''))
         
         if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(configpars['nfill'])+'_equal_weights.txt'): 
@@ -174,7 +175,8 @@ if configpars['doplot']:
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \
                                  specres=configpars['specres'], Nrange=configpars['Nrange'], brange=configpars['brange'], \
                                  zrange=configpars['zrange'], Nrangefill=configpars['Nrangefill'], \
-                                 brangefill=configpars['brangefill'], wrangefill=configpars['wrangefill'], Asymmlike=configpars['asymmlike'], \
+                                 brangefill=configpars['brangefill'], wrangefill=configpars['wrangefill'], \
+                                 Asymmlike=configpars['asymmlike'], oversample=configpars['oversample'], \
                                  debug=args.debug) as temp:
                           
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(temp.nfill), return_sorted=True)

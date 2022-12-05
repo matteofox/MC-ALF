@@ -5,7 +5,7 @@ import glob, os, shutil, socket, warnings
 import string, gc, time, copy
 import datetime
 import astropy.units as u
-from astropy.convolution import convolve, Gaussian1DKernel
+from astropy.convolution import convolve, convolve_fft, Gaussian1DKernel
 from scipy.signal import convolve as scipy_convolve
 from linetools.lists.linelist import LineList
 from scipy.special import wofz
@@ -22,7 +22,7 @@ class als_fitter:
 
     def __init__(self, specfile, fitrange, fitlines, ncomp, nfill=0, specres=[7.0], contval=[1.0], Nrange=[11.5,16], \
                  brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], wrangefill=None, coldef=['Wave', 'Flux', 'Err'], \
-                 Gpriors=None, Asymmlike=False, debug=False):
+                 Gpriors=None, Asymmlike=False, oversample=1,debug=False):
         
         """ Class for dealing with MultiNest fitting
         if provided, specfile should be the *full path* to the spectrum
@@ -35,6 +35,7 @@ class als_fitter:
         self.fitlines = fitlines
         self.Gpriors = Gpriors
         self.Asymmlike = Asymmlike
+        self.oversample = int(oversample)
         if self.Asymmlike:
          print("Running asymmetric likelihood")
         self.specres = specres
@@ -76,7 +77,28 @@ class als_fitter:
         velsteps = (self.obj_wl[1:]-self.obj_wl[:-1])/self.obj_wl[1:]*self.clight
         mn, med, stddev = sigma_clipped_stats(velsteps)
         
+        #Define typical velocity step of array
         self.velstep = med
+        #Find if spectrum has jumps, need a +1 for the index because velsteps is shorter than wave array
+        #then add last element to the indices
+        self.jumpind = (np.where(velsteps>med+5*stddev)[0])
+        self.jumpind = np.append(self.jumpind, len(self.obj_wl)-1)
+        
+        
+        #Now work out an oversampled wave grid 
+        if self.oversample>1:
+           
+           startstep = self.obj_wl[1]-self.obj_wl[0]
+           endstep   = self.obj_wl[self.jumpind[0]]-self.obj_wl[self.jumpind[0]-1]
+           self.obj_wl_over = np.linspace(self.obj_wl[0]-startstep/self.oversample, self.obj_wl[self.jumpind[0]]+endstep/self.oversample, num=self.oversample*(1+self.jumpind[0]))
+        
+           if len(self.jumpind)>1:
+              for ii in range(len(self.jumpind)-1):
+                   startstep = self.obj_wl[self.jumpind[ii]+2]-self.obj_wl[self.jumpind[ii]+1]
+                   endstep   = self.obj_wl[self.jumpind[ii+1]]-self.obj_wl[self.jumpind[ii+1]-1]
+                   self.obj_wl_over = np.concatenate((self.obj_wl_over, np.linspace(self.obj_wl[self.jumpind[ii]+1]-startstep/self.oversample, self.obj_wl[self.jumpind[ii+1]]+endstep/self.oversample, num=self.oversample*(self.jumpind[ii+1]-self.jumpind[ii]))))
+        else:
+           self.obj_wl_over = np.copy(self.obj_wl)  
         
         # read in lines from database
         linelist = LineList('ISM', verbose=False)       
@@ -317,8 +339,6 @@ class als_fitter:
           
           #mp.show()
           
-          #stop=1
-          
           #badres = (model_spec<self.obj)
           #if badres.sum()>0:
           #   spec_lprio = -np.inf #1e10*(-0.5*np.nansum((ispec2[badres]*(self.obj[badres]-model_spec[badres])**2 - np.log(ispec2[badres]) + np.log(2.*np.pi))))
@@ -380,33 +400,36 @@ class als_fitter:
         
     def reconstruct_onecomp(self, specresolution, continuum, N, z, b):
         
-        specmodel = np.ones_like(self.obj)
+        specmodel = np.ones_like(self.obj_wl_over)
         
         for line in range(self.numlines):
-           voigt=self.voigt_model(self.obj_wl, N, b, z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
+           voigt=self.voigt_model(self.obj_wl_over, N, b, z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
            specmodel *= voigt
             
-        #return the re-normalized model multipled by continuum
+        #return the re-normalized model normalized by continuum
         if specresolution > self.velstep:
-             specmodel_conv = self.convolve_model(specmodel, specresolution)
-             return specmodel_conv*continuum
-        else:
-             return specmodel*continuum
+             specmodel = self.convolve_model(specmodel, specresolution)
+        
+        #Now rebin to match original wl array and return
+        specmodel *= continuum
+        
+        return np.mean(specmodel.reshape(len(self.obj),self.oversample), axis=1)
 
     def reconstruct_onecomp_fill(self, specresolution, continuum, N, z, b):
         
-        specmodel = np.ones_like(self.obj)
+        specmodel = np.ones_like(self.obj_wl_over)
         
-        voigt=self.voigt_model(self.obj_wl, N, b, z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
+        voigt=self.voigt_model(self.obj_wl_over, N, b, z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
         specmodel *= voigt
             
-        #return the re-normalized model + emission lines
+        #return the re-normalized model normalized by continuum
         if specresolution > self.velstep:
-             specmodel_conv = self.convolve_model(specmodel, specresolution)
-             return specmodel_conv*continuum
-        else:
-             return specmodel*continuum
-
+             specmodel = self.convolve_model(specmodel, specresolution)
+        
+        #Now rebin to match original wl array and return
+        specmodel *= continuum
+        
+        return np.mean(specmodel.reshape(len(self.obj),self.oversample), axis=1)
     
     def reconstruct_spec(self, p, targonly=False):
         
@@ -424,34 +447,36 @@ class als_fitter:
         else:
            continuum = self.contval
         
-        specmodel = np.ones_like(self.obj)
+        specmodel = np.ones_like(self.obj_wl_over)
         thisncomp = int(p[self.startind])
         
         for comp in range(thisncomp):
             _N, _z, _b = p[1+3*comp+self.startind:1+3*comp+3+self.startind] #First one is for Ncomp in the fit
             
             for line in range(self.numlines):
-               voigt=self.voigt_model(self.obj_wl, _N, _b, _z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
+               voigt=self.voigt_model(self.obj_wl_over, _N, _b, _z, self.linepars[line]['wrest'].value, self.linepars[line]['f'], self.linepars[line]['gamma'].value) 
                specmodel *= voigt
         
         if not targonly:
            for fill in range(self.nfill):
               _N, _z, _b = p[3*fill+self.endind:3*fill+3+self.endind]
              
-              voigt=self.voigt_model(self.obj_wl, _N, _b, _z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
+              voigt=self.voigt_model(self.obj_wl_over, _N, _b, _z, self.linefill['wrest'].value, self.linefill['f'], self.linefill['gamma'].value) 
               specmodel *= voigt
             
         #return the re-normalized model normalized by continuum
         if specresolution > self.velstep:
-             specmodel_conv = self.convolve_model(specmodel, specresolution)
-             return specmodel_conv*continuum
-        else:
-             return specmodel*continuum
-    
+             specmodel = self.convolve_model(specmodel, specresolution)
+        
+        #Now rebin to match original wl array and return
+        specmodel *= continuum
+        
+        return np.mean(specmodel.reshape(len(self.obj),self.oversample), axis=1)
+            
     
     def convolve_model(self, spec, fwhm):
     
-        sigma = (fwhm / 2.354820) / self.velstep
+        sigma = self.oversample* (fwhm / 2.354820) / (self.velstep)
         # gaussian drops to 1/100 of maximum value at x =
         # sqrt(2*ln(100))*sigma, so number of pixels to include from
         # centre of gaussian is:
@@ -466,7 +491,7 @@ class als_fitter:
     
     
     
-    def calc_w(self, p, lineid=0):
+    def calc_ew(self, p, lineid=0):
         
         #Calculate rest frame equivalent width of the 
         #absorption profile
@@ -634,6 +659,11 @@ def readconfig(configfile=None, logger=None):
         solver = input_params.get('input', 'solver')
     else:
         solver = 'polychord'    
+        
+    if input_params.has_option('input', 'oversample'):
+        oversample = int(input_params.get('input', 'oversample'))
+    else:
+        oversample = 1   
     
     #Paths are desirable but not essential, default to cwd
     if not input_params.has_option('pathing', 'datadir'):
@@ -736,6 +766,7 @@ def readconfig(configfile=None, logger=None):
                   'coldef'    : coldef,
                   'asymmlike' : asymmlike,
                   'solver'    : solver,
+                  'oversample': oversample,
                   'specres'   : specres,
                   'chaindir'  : chaindir,
                   'plotdir'   : plotdir,
@@ -777,5 +808,5 @@ def readconfig(configfile=None, logger=None):
 
     return run_params
 
-#b /cosma/home/durham/dc-foss1/.local/lib/python3.7/site-packages/mc_alf-0.99-py3.7.egg/mcalf/routines/hires_fitter.py:558
-
+#b /cosma/home/durham/dc-foss1/.local/lib/python3.7/site-packages/mc_alf-0.99-py3.7.egg/mcalf/routines/hires_fitter.py:558#
+#b /home/matteo/.local/lib/python3.8/site-packages/mc_alf-0.99-py3.8.egg/mcalf/routines/hires_fitter.py:82
