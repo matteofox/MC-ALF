@@ -9,7 +9,11 @@ import glob, os, shutil, warnings
 import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
-from mpi4py import MPI
+try:
+  from mpi4py import MPI
+  mpi=1
+except:
+  mpi=0
 
 from mcalf.routines import hires_fitter as fitter
 
@@ -27,10 +31,9 @@ if args.debug:
    print('DEBUG mode, increased verbosity')
 
 #Create directories if necessary
-if MPI.COMM_WORLD.rank==0:
- if not os.path.isdir(configpars['chaindir']):
+if not os.path.isdir(configpars['chaindir']):
    os.makedirs(configpars['chaindir'])
- if not os.path.isdir(configpars['plotdir']):
+if not os.path.isdir(configpars['plotdir']):
    os.makedirs(configpars['plotdir'])
 
 if configpars['dofit']:
@@ -68,11 +71,15 @@ if configpars['dofit']:
                  settings.cluster_posteriors = configsettings['cluster_posteriors']
            
               # Run PolyChord
-           
+              
+              print('Running polychord')
               t0 = datetime.datetime.now()
               output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
               t1 = datetime.datetime.now()
-              if MPI.COMM_WORLD.rank==0:
+              if mpi==1:
+                if MPI.COMM_WORLD.rank==0:
+                 print('Execution time {}'.format(t1-t0))
+              else:
                  print('Execution time {}'.format(t1-t0))
            
            elif configpars['solver'] == 'dypolychord':
@@ -137,9 +144,12 @@ if configpars['dofit']:
                    importance_nested_sampling=False, n_live_points=nlive, n_iter_before_update=100, \
                    evidence_tolerance=0.1)
               t1 = datetime.datetime.now()
-              if MPI.COMM_WORLD.rank==0:
+              if mpi==1:
+                if MPI.COMM_WORLD.rank==0:
                  print('Execution time {}'.format(t1-t0))
-           
+              else:
+                 print('Execution time {}'.format(t1-t0))
+               
            elif configpars['solver'] == 'dynesty':
                
                import dynesty
@@ -164,11 +174,9 @@ if configpars['dofit']:
 if configpars['doplot']:
      
      #This can only be one on one core....
-                             
-     if MPI.COMM_WORLD.rank==0:
-        print('Analyzing run: '+configpars['chainfmt'].format('',''))
+     print('Analyzing run: '+configpars['chainfmt'].format('',''))
         
-        if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(configpars['nfill'])+'_equal_weights.txt'): 
+     if os.path.exists(configpars['chaindir']+configpars['chainfmt'].format(configpars['nfill'])+'_equal_weights.txt'): 
             
             with fitter.als_fitter(configpars['specfile'], configpars['wavefit'], configpars['linelist'], configpars['ncomp'], \
                                  nfill=configpars['nfill'], coldef=configpars['coldef'], contval=configpars['contval'], \

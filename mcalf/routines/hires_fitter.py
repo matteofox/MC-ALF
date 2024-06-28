@@ -198,7 +198,10 @@ class als_fitter:
           self.bounds.append(self.z_lims_fill[ii])
           self.bounds.append(self.b_lims_fill)
         
-        self.ndim = len(self.bounds)  
+        self.ndim = len(self.bounds) 
+        
+        if debug:
+           print('Init completed') 
                           
     def _scale_cube_pc(self, cube):
         

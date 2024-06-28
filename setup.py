@@ -70,7 +70,7 @@ if __name__ == "__main__":
     if sys.version_info[0] < 3:
       raise Exception("This codes requires Python3")
 
-    scripts = ['scripts/mc-alf3']  
+    scripts = ['scripts/mc-alf']  
     
     cmdclass = {'clean': CleanCommand}
     
@@ -100,7 +100,6 @@ if __name__ == "__main__":
           'numpy',
 	  'scipy',
 	  'matplotlib',
-	  'mpi4py',
 	  'linetools'],
         package_data={"": ["README.md", "LICENSE"]},
         include_package_data=True,
