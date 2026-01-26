@@ -17,7 +17,7 @@ except:
 
 from mcalf.routines import hires_fitter as fitter
 
-pl.rc('text', usetex=True)
+pl.rc('text', usetex=False)
 pl.rcParams['font.size'] = 20
 
 parser = argparse.ArgumentParser()
@@ -53,22 +53,21 @@ if configpars['dofit']:
               settings = PolyChordSettings(temp.ndim, 0)
               settings.file_root = configpars['chainfmt'].format(configpars['nfill'])
               settings.base_dir = configpars['chaindir']
-           
               if 'pcsettings' in configpars:
                  configsettings = configpars['pcsettings']
-                 settings.nlive         = int(configsettings['nlive'])
-                 settings.num_repeats   = int(configsettings['num_repeats'])
-                 settings.precision_criterion = float(configsettings['precision_criterion'])
-                 settings.feedback      = int(configsettings['feedback'])
-                 settings.do_clustering = configsettings['do_clustering']
-                 settings.equals        = configsettings['equals']
-                 settings.read_resume   = configsettings['read_resume']
-                 settings.write_resume  = configsettings['write_resume']
-                 settings.write_live    = configsettings['write_live']
-                 settings.write_dead    = configsettings['write_dead']
-                 settings.write_prior   = configsettings['write_prior']
-                 settings.posteriors    = configsettings['posteriors']
-                 settings.cluster_posteriors = configsettings['cluster_posteriors']
+                 settings.nlive         = int(configsettings.get('nlive', 100))
+                 settings.num_repeats   = int(configsettings.get('num_repeats', 20))
+                 settings.precision_criterion = float(configsettings.get('precision_criterion', 1e-3))
+                 settings.feedback      = int(configsettings.get('feedback', 1)) 
+                 settings.do_clustering = configsettings.get('do_clustering', True)
+                 settings.equals        = configsettings.get('equals', True)
+                 settings.read_resume   = configsettings.get('read_resume', True)
+                 settings.write_resume  = configsettings.get('write_resume', True)
+                 settings.write_live    = configsettings.get('write_live', True)
+                 settings.write_dead    = configsettings.get('write_dead', True)
+                 settings.write_prior   = configsettings.get('write_prior', True)
+                 settings.posteriors    = configsettings.get('posteriors', True)
+                 settings.cluster_posteriors = configsettings.get('cluster_posteriors', True)
            
               # Run PolyChord
               
@@ -168,6 +167,100 @@ if configpars['dofit']:
                
                np.savetxt(out_fmt+'equal_weights.txt', samples_equal)               
                
+           elif configpars['solver'] == 'jaxns':
+               try:
+                   import jax
+                   import jax.numpy as jnp
+                   from jaxns import NestedSampler, Model, Prior
+                   from tensorflow_probability.substrates import jax as tfp
+                   tfpd = tfp.distributions
+                   from jaxns.utils import resample
+               except ImportError:
+                   raise ImportError("jaxns is required for the jaxns solver. Please install it.")
+
+               print('Running jaxns on {}'.format(configpars['device']))
+               
+               # Configure device (optional, JAX usually handles this but we can force it if needed)
+               # if configpars['device'] == 'cpu':
+               #    jax.config.update("jax_platform_name", "cpu")
+               
+               # Get Likelihood
+               log_likelihood = temp.get_jax_likelihood()
+               
+               # constant bounds
+               bounds_list = temp.bounds
+               # Flatten/stacked bounds
+               # bounds is a list of (min, max)
+               lowers = np.array([b[0] for b in bounds_list])
+               uppers = np.array([b[1] for b in bounds_list])
+               ptps = uppers - lowers
+               
+               lowers_j = jnp.array(lowers)
+               uppers_j = jnp.array(uppers)
+               
+               def prior_model():
+                   p = yield Prior(tfpd.Uniform(low=lowers_j, high=uppers_j), name='p')
+                   return p
+               
+               # JAXNS Model
+               model = Model(prior_model=prior_model, log_likelihood=log_likelihood)
+               
+               # Settings
+               settings_dict = {'max_samples': 1e5} # Defaults
+               if 'jaxns_settings' in configpars:
+                   # Map settings
+                   pass # Implement specific settings mapping if needed
+
+               ns = NestedSampler(model=model)
+               
+               t0 = datetime.datetime.now()
+               termination_reason, state = ns(key=jax.random.PRNGKey(42))
+               t1 = datetime.datetime.now()
+               print('Execution time {}'.format(t1-t0))
+               
+               # Extract results
+               results = ns.to_results(state=state, termination_reason=termination_reason)
+               
+               # Save stats
+               stats_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '.stats'
+               with open(stats_file, 'w') as f:
+                   f.write('log(Z)   : {}   {}\n'.format(float(results.log_Z_mean), float(results.log_Z_uncert)))
+
+               # Resample to equal weights
+               key = jax.random.PRNGKey(42)
+               
+               samples_dict = results.samples
+               log_weights = results.log_dp_mean 
+               
+               # samples_dict['p'] is the array we want (since we named it 'p' in prior_model)
+               if 'p' in samples_dict:
+                   samples_raw = samples_dict['p']
+               else:
+                   samples_raw = list(samples_dict.values())[0] 
+                   
+               # Resample samples and logL
+               # We resample with replacement to get equal weights
+               S_resample = int(settings_dict.get('max_samples', 1000))
+               samples_equal = resample(key=key, samples=samples_raw, log_weights=log_weights, S=S_resample, replace=True)
+               log_L_equal = resample(key=key, samples=results.log_L_samples, log_weights=log_weights, S=S_resample, replace=True)
+               
+               # Construct output matrix for pc_analyzer
+               # [weight, -2*logL, p1, p2, ...]
+               N_samples = samples_equal.shape[0]
+               weights_col = np.ones((N_samples, 1))
+               
+               # pc_analyzer expects col 1 to be -2*ln(L)
+               # lln = -0.5 * col1 => col1 = -2 * lln
+               logL_col = -2.0 * log_L_equal.reshape(-1, 1) 
+               
+               samples_out = samples_equal.reshape(N_samples, -1)
+               
+               output_matrix = np.hstack([weights_col, logL_col, samples_out])
+               
+               chain_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '_equal_weights.txt'
+               np.savetxt(chain_file, output_matrix)
+               print(f"Saved results to {chain_file}")
+
            else:
                  print('Requested solver {} not implemented'.format(solver))
 
