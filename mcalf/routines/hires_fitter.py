@@ -18,9 +18,11 @@ except(ImportError):
 
 try:
     import jax
+    jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
     from jax import jit, vmap
     from tensorflow_probability.substrates import jax as tfp
+    from mcalf.routines import voigt_jax
     jax_available = True
     
     # wofz(z) = erfcx(-i * z)
@@ -433,7 +435,9 @@ class als_fitter:
         if self.freespecres:
            specresolution = p[0]
         else:
-           specresolution = self.specres   
+           specresolution = self.specres
+           if isinstance(specresolution, list) or isinstance(specresolution, np.ndarray):
+               specresolution = float(max(specresolution))
         
         if self.freecont:
            if self.freespecres:
@@ -787,7 +791,10 @@ class als_fitter:
              
              cne = 0.014971475 * cold * f
              
-             v = jax_wofz(uvoigt + 1j * avoigt).real
+             # hjert expects scalar inputs, so we vmap over uvoigt (array) and avoigt (scalar)
+             # map arg 0, broadcast arg 1
+             v = vmap(voigt_jax.hjert, (0, None))(uvoigt, avoigt)
+             
              tau = cne * v / dnu
              return tau
         
@@ -841,6 +848,14 @@ class als_fitter:
             kernel = kernel / jnp.sum(kernel)
             
             specmodel_conv = jnp.convolve(specmodel, kernel, mode='same')
+            
+            # Reset edges to continuum (unconvolved model) to avoid convolution artifacts
+            n_pix = specmodel.shape[0]
+            idx_arr = jnp.arange(n_pix)
+            # Use half_size from outer scope
+            edge_mask = (idx_arr < half_size) | (idx_arr >= n_pix - half_size)
+            specmodel_conv = jnp.where(edge_mask, specmodel, specmodel_conv)
+            
             do_conv = specresolution > velstep
             final_spec = jnp.where(do_conv, specmodel_conv, specmodel)
             

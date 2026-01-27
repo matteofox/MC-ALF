@@ -15,7 +15,9 @@ try:
 except:
   mpi=0
 
-from mcalf.routines import hires_fitter as fitter
+from mcalf.routines import hires_fitter
+print(f"DEBUG: hires_fitter loaded from {hires_fitter.__file__}")
+fitter = hires_fitter
 
 pl.rc('text', usetex=False)
 pl.rcParams['font.size'] = 20
@@ -187,6 +189,12 @@ if configpars['dofit']:
                # Get Likelihood
                log_likelihood = temp.get_jax_likelihood()
                
+               # DEBUG DATA STATS
+               obj_flux = temp.obj
+               pixels_below_09 = np.sum(obj_flux < 0.9)
+               print(f"DEBUG DATA: Min Flux = {np.min(obj_flux)}")
+               print(f"DEBUG DATA: Pixels < 0.9 = {pixels_below_09}")
+               
                # constant bounds
                bounds_list = temp.bounds
                # Flatten/stacked bounds
@@ -206,15 +214,25 @@ if configpars['dofit']:
                model = Model(prior_model=prior_model, log_likelihood=log_likelihood)
                
                # Settings
-               settings_dict = {'max_samples': 1e5} # Defaults
+               settings_dict = {'max_samples': 1e5, 'num_live_points': 500} # Defaults
                if 'jaxns_settings' in configpars:
                    # Map settings
-                   pass # Implement specific settings mapping if needed
-
-               ns = NestedSampler(model=model)
+                   if 'max_samples' in configpars['jaxns_settings']:
+                       settings_dict['max_samples'] = float(configpars['jaxns_settings']['max_samples'])
+                   if 'num_live_points' in configpars['jaxns_settings']:
+                       settings_dict['num_live_points'] = int(configpars['jaxns_settings']['num_live_points'])
+               
+               max_samples = int(settings_dict['max_samples'])
+               num_lives = int(settings_dict['num_live_points'])
+               print(f"DEBUG: Initializing NestedSampler with max_samples={max_samples}, num_live_points={num_lives}")
+               
+               # Note: JAXNS v2 NestedSampler argument might be num_live_points or similar.
+               # Assuming constructor accepts it as kwargs or direct arg.
+               ns = NestedSampler(model=model, max_samples=max_samples, num_live_points=num_lives)
                
                t0 = datetime.datetime.now()
-               termination_reason, state = ns(key=jax.random.PRNGKey(42))
+               # Use seed 43 to refresh
+               termination_reason, state = ns(key=jax.random.PRNGKey(43))
                t1 = datetime.datetime.now()
                print('Execution time {}'.format(t1-t0))
                
@@ -224,7 +242,7 @@ if configpars['dofit']:
                # Save stats
                stats_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '.stats'
                with open(stats_file, 'w') as f:
-                   f.write('log(Z)   : {}   {}\n'.format(float(results.log_Z_mean), float(results.log_Z_uncert)))
+                   f.write('log(Z)   : {}   +/-   {}\n'.format(float(results.log_Z_mean), float(results.log_Z_uncert)))
 
                # Resample to equal weights
                key = jax.random.PRNGKey(42)
