@@ -4,7 +4,7 @@ Version: 0.99
 Summary: Monte-Carlo Absorption Line Fitter
 Home-page: https://github.com/matteofox/mc-alf
 Author: Matteo Fossati
-Author-email: matteo.fossati@durham.ac.uk
+Author-email: matteo.fossati@unimib.it
 License: LICENSE
 License-File: LICENSE
 Requires-Dist: numpy

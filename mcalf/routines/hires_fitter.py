@@ -65,7 +65,6 @@ class als_fitter:
            self.freespecres = False
 
         #constants
-        self.small_num = 1e-70
         self.clight  = 2.9979245e5 #km/s
         self.ccgs = 2.9979245e10 #cm/s
         
@@ -151,16 +150,7 @@ class als_fitter:
             print('Zrange keyword not understood. Aborting.')
             return 0
           self.z_lims.append(np.array((zmin, zmax)))
-        
-       
-        #if zrange is not None:
-        #  self.z_lims = zrange
-        #else:
-        #  #If fitting multiplets the z range spans the spectrum where the first line is expected
-        #  self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
-        #  self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
-        #  self.z_lims = np.array((self.zmin, self.zmax))
-        
+
         #For fillers they can be anywhere unless wrangefill is set
         self.z_lims_fill = []
         for zz in range(self.nfill):
@@ -476,9 +466,7 @@ class als_fitter:
         return convolve(spec, Gaussian1DKernel(sigma, x_size=x_size),
                         boundary='wrap', normalize_kernel=True)
     
-    
-    
-    
+
     def calc_w(self, p, lineid=0):
         
         #Calculate rest frame equivalent width of the 
@@ -628,7 +616,7 @@ class als_fitter:
             else:
                 continuum = contval
                 
-            thisncomp = jnp.floor(p[startind]).astype(int) # Use floor/astype
+            thisncomp =  jnp.floor(p[startind]).astype(jnp.int32)
             
             # Start with continuum
             # specmodel = jnp.ones_like(obj_wl) # Start as 1.0
@@ -709,140 +697,6 @@ class als_fitter:
 
         return _jax_loglikelihood
 
-    def get_jax_model_func(self):
-        if not jax_available:
-            raise ImportError("JAX is not available.")
-            
-        # Prepare constants
-        obj_wl = jnp.array(self.obj_wl, dtype=jnp.float32)
-        
-        # Line parameters to arrays
-        line_wrest = jnp.array([l['wrest'].value for l in self.linepars], dtype=jnp.float32)
-        line_f = jnp.array([l['f'] for l in self.linepars], dtype=jnp.float32)
-        line_gamma = jnp.array([l['gamma'].value for l in self.linepars], dtype=jnp.float32)
-        
-        # Fill line parameters
-        fill_wrest = self.linefill['wrest'].value
-        fill_f = self.linefill['f']
-        fill_gamma = self.linefill['gamma'].value
-        
-        # Constants
-        ccgs = self.ccgs
-        velstep = self.velstep
-
-        # Determine max kernel size for convolution if specres is free
-        if self.freespecres:
-             max_res = self.res_lims[1]
-        else:
-             max_res = self.specres
-             if isinstance(max_res, (list, tuple, np.ndarray)):
-                 max_res = np.max(max_res)
-             max_res = float(max_res)
-
-        sigma_max = (max_res / 2.354820) / velstep
-        n_max = jnp.ceil(3.0348 * sigma_max).astype(jnp.float32)
-        half_size = int(n_max)
-        kernel_x = jnp.arange(-half_size, half_size + 1)
-        
-        # Configuration flags
-        startind = self.startind
-        endind = self.endind
-        ncompmax = self.ncompmax
-        nfill = self.nfill
-        numlines = self.numlines
-        
-        freespecres = self.freespecres
-        freecont = self.freecont
-        contval = float(self.contval[0])
-        fixed_specres = float(self.specres[0]) if not freespecres else 0.0
-        
-        @jit
-        def _jax_voigt_tau(wave, N, z, b, wrest, f, gamma):
-             cold = 10.0**N
-             zp1 = z + 1.0
-             w_cm = wave / 1e8
-             wrest_cm = wrest / 1e8
-             
-             nujk = ccgs / wrest_cm
-             dnu = (b * 1e5) / wrest_cm 
-             
-             avoigt = gamma / (4 * jnp.pi * dnu)
-             uvoigt = ((ccgs / (w_cm / zp1)) - nujk) / dnu
-             
-             cne = 0.014971475 * cold * f
-             
-             # hjert expects scalar inputs, so we vmap over uvoigt (array) and avoigt (scalar)
-             # map arg 0, broadcast arg 1
-             v = vmap(voigt_jax.hjert, (0, None))(uvoigt, avoigt)
-             
-             tau = cne * v / dnu
-             return tau
-        
-        @jit
-        def _jax_reconstruct_spec(p):
-            if freespecres:
-                specresolution = p[0]
-            else:
-                specresolution = fixed_specres
-                
-            if freecont:
-                if freespecres:
-                    continuum = p[1]
-                else:
-                    continuum = p[0]
-            else:
-                continuum = contval
-                
-            thisncomp = jnp.floor(p[startind]).astype(int)
-            total_tau = jnp.zeros_like(obj_wl)
-            
-            def body_fun(i, current_tau):
-                is_active = i < thisncomp
-                idx = 1 + 3*i + startind
-                _N = p[idx]
-                _z = p[idx+1]
-                _b = p[idx+2]
-                
-                def line_body(j, val):
-                     t = _jax_voigt_tau(obj_wl, _N, _z, _b, line_wrest[j], line_f[j], line_gamma[j])
-                     return val + t
-                
-                comp_tau = jax.lax.fori_loop(0, numlines, line_body, jnp.zeros_like(obj_wl))
-                return current_tau + jnp.where(is_active, comp_tau, 0.0)
-
-            total_tau = jax.lax.fori_loop(0, ncompmax, body_fun, total_tau)
-            
-            def fill_body(i, current_tau):
-                idx = 3*i + endind 
-                _N = p[idx]
-                _z = p[idx+1]
-                _b = p[idx+2]
-                t = _jax_voigt_tau(obj_wl, _N, _z, _b, fill_wrest, fill_f, fill_gamma)
-                return current_tau + t
-                
-            total_tau = jax.lax.fori_loop(0, nfill, fill_body, total_tau)
-            specmodel = jnp.exp(-total_tau)
-            
-            sigma = (specresolution / 2.354820) / velstep
-            kernel = jnp.exp(-kernel_x**2 / (2 * sigma**2))
-            kernel = kernel / jnp.sum(kernel)
-            
-            specmodel_conv = jnp.convolve(specmodel, kernel, mode='same')
-            
-            # Reset edges to continuum (unconvolved model) to avoid convolution artifacts
-            n_pix = specmodel.shape[0]
-            idx_arr = jnp.arange(n_pix)
-            # Use half_size from outer scope
-            edge_mask = (idx_arr < half_size) | (idx_arr >= n_pix - half_size)
-            specmodel_conv = jnp.where(edge_mask, specmodel, specmodel_conv)
-            
-            do_conv = specresolution > velstep
-            final_spec = jnp.where(do_conv, specmodel_conv, specmodel)
-            
-            return final_spec * continuum
-
-        return _jax_reconstruct_spec
-    
     def __enter__(self):
         return self
     def __exit__(self, type, value, trace):

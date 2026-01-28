@@ -1,4 +1,4 @@
-#!/Users/matteo/anaconda3/envs/mcalfgpu/bin/python
+#!/data/mfossati/anaconda3/envs/mcalfgpu/bin/python
 import numpy as np
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
@@ -7,9 +7,6 @@ import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
 import contextlib
-import os
-os.environ['JAX_ENABLE_X64'] = '0'
-os.environ['JAX_DEFAULT_PRECISION'] = 'float32'
 
 @contextlib.contextmanager
 def suppress_output():
@@ -206,20 +203,20 @@ if configpars['dofit']:
                
            elif configpars['solver'] == 'jaxns':
                try:
+
+                   os.environ['JAX_PLATFORMS'] = 'cuda,cpu'
+
                    import jax
 
                    if configpars['device'] == 'cpu':
-                       jax.config.update("jax_platform_name", "cpu")
+                      jax.config.update("jax_platform_name", "cpu")
 
                    jax.config.update("jax_enable_x64", False)
                    import jax.numpy as jnp
 
-                   with jax.default_device(jax.devices("cpu")[0]):
-                       from jaxns import NestedSampler, Model, Prior
+                   from jaxns import NestedSampler, Model, Prior
                    import jaxns.internals.mixed_precision as jmp
                    jmp.mp_policy = jmp.Policy(count_dtype=jnp.int32, index_dtype=jnp.int32, measure_dtype=jnp.float32)
-                   print('TEST')
-                   print(f"Jaxns Measure Dtype: {jmp.mp_policy.measure_dtype}")
 
                    from tensorflow_probability.substrates import jax as tfp
                    from jaxns.utils import resample
@@ -274,8 +271,7 @@ if configpars['dofit']:
                #Actual run here
                t0 = datetime.datetime.now()
                # Use seed 43 to refresh
-               with jax.default_device(jax.devices("cpu")[0]):
-                   termination_reason, state = ns(key=jax.random.PRNGKey(jnp.int32(43)))
+               termination_reason, state = ns(key=jax.random.PRNGKey(jnp.int32(43)))
                t1 = datetime.datetime.now()
                print('[INFO] JAXNS Execution time {}'.format(t1-t0))
 
@@ -294,7 +290,7 @@ if configpars['dofit']:
                    f.write('log(Z)   : {}   +/-   {}\n'.format(float(results.log_Z_mean), float(results.log_Z_uncert)))
 
                # Resample to equal weights
-               key = jax.random.PRNGKey(42)
+               key = jax.random.PRNGKey(jnp.int32(42))
                
                samples_dict = results.samples
                log_weights = results.log_dp_mean 
@@ -322,7 +318,7 @@ if configpars['dofit']:
                
                chain_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '_equal_weights.txt'
                np.savetxt(chain_file, output_matrix)
-               print(f"Saved results to {chain_file}")
+               print(f"Saved JAXNS results to {chain_file}")
 
            else:
                print('Requested solver {} not implemented'.format(configpars['solver']))
@@ -342,7 +338,7 @@ if configpars['doplot']:
                                  debug=args.debug) as temp:
                           
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(temp.nfill), return_sorted=True)
-              
+
               #Define parameter names
               parameters = fitter.get_parnames(temp.ncompmax+temp.nfill, temp.freecont)
         
@@ -363,7 +359,7 @@ if configpars['doplot']:
               else:
                  specresolution = temp.specres[0]
               
-              ncomp_arr, ncomp_counts = np.unique(values[:,temp.startind], return_counts=True)
+              ncomp_arr, ncomp_counts = np.unique(np.floor(values[:,temp.startind]).astype(int), return_counts=True)
               ncomp_counts = 1.*ncomp_counts/np.sum(ncomp_counts)
               
               #Calc median likelihood across posterior

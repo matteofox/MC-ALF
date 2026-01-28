@@ -203,16 +203,18 @@ if configpars['dofit']:
                
            elif configpars['solver'] == 'jaxns':
                try:
+
+                   os.environ['JAX_PLATFORMS'] = 'cuda,cpu'
+
                    import jax
 
                    if configpars['device'] == 'cpu':
-                       jax.config.update("jax_platform_name", "cpu")
+                      jax.config.update("jax_platform_name", "cpu")
 
                    jax.config.update("jax_enable_x64", False)
                    import jax.numpy as jnp
 
-                   with jax.default_device(jax.devices("cpu")[0]):
-                       from jaxns import NestedSampler, Model, Prior
+                   from jaxns import NestedSampler, Model, Prior
                    import jaxns.internals.mixed_precision as jmp
                    jmp.mp_policy = jmp.Policy(count_dtype=jnp.int32, index_dtype=jnp.int32, measure_dtype=jnp.float32)
 
@@ -288,7 +290,7 @@ if configpars['dofit']:
                    f.write('log(Z)   : {}   +/-   {}\n'.format(float(results.log_Z_mean), float(results.log_Z_uncert)))
 
                # Resample to equal weights
-               key = jax.random.PRNGKey(42)
+               key = jax.random.PRNGKey(jnp.int32(42))
                
                samples_dict = results.samples
                log_weights = results.log_dp_mean 
@@ -316,7 +318,7 @@ if configpars['dofit']:
                
                chain_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '_equal_weights.txt'
                np.savetxt(chain_file, output_matrix)
-               print(f"Saved results to {chain_file}")
+               print(f"Saved JAXNS results to {chain_file}")
 
            else:
                print('Requested solver {} not implemented'.format(configpars['solver']))
@@ -336,7 +338,7 @@ if configpars['doplot']:
                                  debug=args.debug) as temp:
                           
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(temp.nfill), return_sorted=True)
-              
+
               #Define parameter names
               parameters = fitter.get_parnames(temp.ncompmax+temp.nfill, temp.freecont)
         
@@ -357,7 +359,7 @@ if configpars['doplot']:
               else:
                  specresolution = temp.specres[0]
               
-              ncomp_arr, ncomp_counts = np.unique(values[:,temp.startind], return_counts=True)
+              ncomp_arr, ncomp_counts = np.unique(np.floor(values[:,temp.startind]).astype(int), return_counts=True)
               ncomp_counts = 1.*ncomp_counts/np.sum(ncomp_counts)
               
               #Calc median likelihood across posterior

@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="mcalfgpu" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="mcalfgpu" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (MC-ALF) (2)" project-jdk-type="Python SDK" />
 </project>
