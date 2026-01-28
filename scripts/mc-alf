@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import numpy as np
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
@@ -33,15 +32,16 @@ def suppress_output():
             # Close saved fds
             os.close(old_stdout)
             os.close(old_stderr)
+
+
 try:
   from mpi4py import MPI
   mpi=1
 except:
   mpi=0
 
-from mcalf.routines import hires_fitter
-print(f"DEBUG: hires_fitter loaded from {hires_fitter.__file__}")
-fitter = hires_fitter
+from mcalf.routines import hires_fitter as fitter
+
 
 pl.rc('text', usetex=False)
 pl.rcParams['font.size'] = 20
@@ -54,7 +54,9 @@ args = parser.parse_args()
 configpars = fitter.readconfig(args.config)
 
 if args.debug:
-   print('DEBUG mode, increased verbosity')
+   print('--- DEBUG mode, increased verbosity ---')
+if args.debug:
+    print('[DEBUG]: hires_fitter loaded from {}'.format(fitter.__file__))
 
 #Create directories if necessary
 if not os.path.isdir(configpars['chaindir']):
@@ -152,7 +154,7 @@ if configpars['dofit']:
                                            comm=MPI.COMM_WORLD)
                
              
-           elif configpars['solver'] == 'multinest':
+           elif configpars['solver'] == 'multinest': #Too slow with tens of parameters
               
               import pymultinest
               
@@ -202,19 +204,28 @@ if configpars['dofit']:
            elif configpars['solver'] == 'jaxns':
                try:
                    import jax
+
+                   if configpars['device'] == 'cpu':
+                       jax.config.update("jax_platform_name", "cpu")
+
+                   jax.config.update("jax_enable_x64", False)
                    import jax.numpy as jnp
-                   from jaxns import NestedSampler, Model, Prior
+
+                   with jax.default_device(jax.devices("cpu")[0]):
+                       from jaxns import NestedSampler, Model, Prior
+                   import jaxns.internals.mixed_precision as jmp
+                   jmp.mp_policy = jmp.Policy(count_dtype=jnp.int32, index_dtype=jnp.int32, measure_dtype=jnp.float32)
+
                    from tensorflow_probability.substrates import jax as tfp
-                   tfpd = tfp.distributions
                    from jaxns.utils import resample
+
                except ImportError:
                    raise ImportError("jaxns is required for the jaxns solver. Please install it.")
 
                print('Running jaxns on {}'.format(configpars['device']))
                
-               # Configure device (optional, JAX usually handles this but we can force it if needed)
-               # if configpars['device'] == 'cpu':
-               #    jax.config.update("jax_platform_name", "cpu")
+               # Configure device as requested
+
                
                # Get Likelihood
                log_likelihood = temp.get_jax_likelihood()
@@ -227,15 +238,16 @@ if configpars['dofit']:
                uppers = np.array([b[1] for b in bounds_list])
                ptps = uppers - lowers
                
-               lowers_j = jnp.array(lowers)
-               uppers_j = jnp.array(uppers)
+               lowers_j = jnp.array(lowers, dtype=jnp.float32)
+               uppers_j = jnp.array(uppers, dtype=jnp.float32)
                
                def prior_model():
-                   p = yield Prior(tfpd.Uniform(low=lowers_j, high=uppers_j), name='p')
+                   p = yield Prior(tfp.distributions.Uniform(low=lowers_j, high=uppers_j), name='p')
                    return p
                
-               # JAXNS Model
-               model = Model(prior_model=prior_model, log_likelihood=log_likelihood)
+               # JAXNS Model Force the Model creation to happen on CPU memory
+               with jax.default_device(jax.devices("cpu")[0]):
+                   model = Model(prior_model=prior_model, log_likelihood=log_likelihood)
                
                # Settings
                settings_dict = {'max_samples': 1e5, 'num_live_points': 500} # Defaults
@@ -251,14 +263,13 @@ if configpars['dofit']:
                if args.debug:
                    print(f"[DEBUG]: Initializing NestedSampler with max_samples={max_samples}, num_live_points={num_lives}")
                
-               # Note: JAXNS v2 NestedSampler argument might be num_live_points or similar.
-               # Assuming constructor accepts it as kwargs or direct arg.
+               # Nested sampler
                ns = NestedSampler(model=model, max_samples=max_samples, num_live_points=num_lives)
 
                #Actual run here
                t0 = datetime.datetime.now()
                # Use seed 43 to refresh
-               termination_reason, state = ns(key=jax.random.PRNGKey(43))
+               termination_reason, state = ns(key=jax.random.PRNGKey(jnp.int32(43)))
                t1 = datetime.datetime.now()
                print('[INFO] JAXNS Execution time {}'.format(t1-t0))
 
@@ -282,12 +293,10 @@ if configpars['dofit']:
                samples_dict = results.samples
                log_weights = results.log_dp_mean 
                
-               # samples_dict['p'] is the array we want (since we named it 'p' in prior_model)
                if 'p' in samples_dict:
                    samples_raw = samples_dict['p']
                else:
                    samples_raw = list(samples_dict.values())[0] 
-
 
                # Resample samples and logL
                # We resample with replacement to get equal weights
@@ -301,11 +310,8 @@ if configpars['dofit']:
                weights_col = np.ones((N_samples, 1))
                
                # pc_analyzer expects col 1 to be -2*ln(L)
-               # lln = -0.5 * col1 => col1 = -2 * lln
-               logL_col = -2.0 * log_L_equal.reshape(-1, 1) 
-               
+               logL_col = -2.0 * log_L_equal.reshape(-1, 1)
                samples_out = samples_equal.reshape(N_samples, -1)
-               
                output_matrix = np.hstack([weights_col, logL_col, samples_out])
                
                chain_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '_equal_weights.txt'

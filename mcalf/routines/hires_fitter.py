@@ -18,16 +18,15 @@ except(ImportError):
 
 try:
     import jax
-    jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
     from jax import jit, vmap
     from tensorflow_probability.substrates import jax as tfp
-    from mcalf.routines import voigt_jax
     jax_available = True
+    print("JAX and Tensorflow Probability available. JAX solver will work, if requested.")
 
 except ImportError:
     jax_available = False
-    print("JAX or Tensorflow Probability not available. GPU solver will not work.")
+    print("JAX or Tensorflow Probability not available. JAX solver will not work.")
 
 warnings.filterwarnings("ignore")
 
@@ -37,7 +36,7 @@ class als_fitter:
                  brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], wrangefill=None, coldef=['Wave', 'Flux', 'Err'], \
                  Gpriors=None, Asymmlike=False, debug=False):
         
-        """ Class for dealing with MultiNest fitting
+        """ Class for dealing with the fitting
         if provided, specfile should be the *full path* to the spectrum
         """
                 
@@ -538,16 +537,18 @@ class als_fitter:
 
         if not jax_available:
             raise ImportError("JAX is not available.")
-            
+        else:
+            from mcalf.routines import voigt_jax
+
         # Prepare constants
-        obj_wl = jnp.array(self.obj_wl)
-        obj = jnp.array(self.obj)
-        obj_noise = jnp.array(self.obj_noise)
+        obj_wl = jnp.array(self.obj_wl, dtype=jnp.float32)
+        obj = jnp.array(self.obj, dtype=jnp.float32)
+        obj_noise = jnp.array(self.obj_noise, dtype=jnp.float32)
         
         # Line parameters to arrays
-        line_wrest = jnp.array([l['wrest'].value for l in self.linepars])
-        line_f = jnp.array([l['f'] for l in self.linepars])
-        line_gamma = jnp.array([l['gamma'].value for l in self.linepars])
+        line_wrest = jnp.array([l['wrest'].value for l in self.linepars], dtype=jnp.float32)
+        line_f = jnp.array([l['f'] for l in self.linepars], dtype=jnp.float32)
+        line_gamma = jnp.array([l['gamma'].value for l in self.linepars], dtype=jnp.float32)
         
         # Fill line parameters
         fill_wrest = self.linefill['wrest'].value
@@ -569,7 +570,7 @@ class als_fitter:
              max_res = float(max_res)
 
         sigma_max = (max_res / 2.354820) / velstep
-        n_max = jnp.ceil(3.0348 * sigma_max)
+        n_max = jnp.ceil((3.0348 * sigma_max).astype(jnp.float32))
         half_size = int(n_max)
         kernel_x = jnp.arange(-half_size, half_size + 1)
         
@@ -653,7 +654,7 @@ class als_fitter:
                 # Loop over lines
                 def line_body(j, val):
                      t = _jax_voigt_tau(obj_wl, _N, _z, _b, line_wrest[j], line_f[j], line_gamma[j])
-                     return val + t
+                     return (val + t).astype(jnp.float32)
                 
                 comp_tau = jax.lax.fori_loop(0, numlines, line_body, jnp.zeros_like(obj_wl))
                 
@@ -670,7 +671,7 @@ class als_fitter:
                 _b = p[idx+2]
                 
                 t = _jax_voigt_tau(obj_wl, _N, _z, _b, fill_wrest, fill_f, fill_gamma)
-                return current_tau + t
+                return (current_tau + t).astype(jnp.float32)
                 
             total_tau = jax.lax.fori_loop(0, nfill, fill_body, total_tau)
             
@@ -713,12 +714,12 @@ class als_fitter:
             raise ImportError("JAX is not available.")
             
         # Prepare constants
-        obj_wl = jnp.array(self.obj_wl)
+        obj_wl = jnp.array(self.obj_wl, dtype=jnp.float32)
         
         # Line parameters to arrays
-        line_wrest = jnp.array([l['wrest'].value for l in self.linepars])
-        line_f = jnp.array([l['f'] for l in self.linepars])
-        line_gamma = jnp.array([l['gamma'].value for l in self.linepars])
+        line_wrest = jnp.array([l['wrest'].value for l in self.linepars], dtype=jnp.float32)
+        line_f = jnp.array([l['f'] for l in self.linepars], dtype=jnp.float32)
+        line_gamma = jnp.array([l['gamma'].value for l in self.linepars], dtype=jnp.float32)
         
         # Fill line parameters
         fill_wrest = self.linefill['wrest'].value
@@ -739,7 +740,7 @@ class als_fitter:
              max_res = float(max_res)
 
         sigma_max = (max_res / 2.354820) / velstep
-        n_max = jnp.ceil(3.0348 * sigma_max)
+        n_max = jnp.ceil(3.0348 * sigma_max).astype(jnp.float32)
         half_size = int(n_max)
         kernel_x = jnp.arange(-half_size, half_size + 1)
         
