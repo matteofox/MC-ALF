@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/matteo/anaconda3/envs/mcalfgpu/bin/python
 
 import numpy as np
 import astropy.io.fits as fits
@@ -78,9 +78,10 @@ if configpars['dofit']:
               if configpars['showprogress']:
                   output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
               else:
+                  print('HERE')
                   with open(os.devnull, "w") as fnull:
                       with redirect_stdout(fnull), redirect_stderr(fnull):
-                         output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+                        output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
 
               t1 = datetime.datetime.now()
               if mpi==1:
