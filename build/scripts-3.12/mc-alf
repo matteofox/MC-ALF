@@ -3,11 +3,36 @@
 import numpy as np
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
-import glob, os, shutil, warnings
+import glob, os, shutil, warnings, sys
 import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
-from contextlib import redirect_stdout, redirect_stderr
+import contextlib
+
+@contextlib.contextmanager
+def suppress_output():
+    # Open /dev/null
+    with open(os.devnull, "w") as devnull:
+        # Save old stdout/stderr
+        old_stdout = os.dup(1)
+        old_stderr = os.dup(2)
+        try:
+            # Flush existing python buffers
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
+            # Redirect
+            os.dup2(devnull.fileno(), 1)
+            os.dup2(devnull.fileno(), 2)
+            
+            yield
+        finally:
+            # Restore
+            os.dup2(old_stdout, 1)
+            os.dup2(old_stderr, 2)
+            # Close saved fds
+            os.close(old_stdout)
+            os.close(old_stderr)
 try:
   from mpi4py import MPI
   mpi=1
@@ -78,10 +103,8 @@ if configpars['dofit']:
               if configpars['showprogress']:
                   output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
               else:
-                  print('HERE')
-                  with open(os.devnull, "w") as fnull:
-                      with redirect_stdout(fnull), redirect_stderr(fnull):
-                        output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+                  with suppress_output():
+                      output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
 
               t1 = datetime.datetime.now()
               if mpi==1:
