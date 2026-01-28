@@ -16,6 +16,18 @@ try:
 except(ImportError):
     import ConfigParser as configparser
 
+try:
+    import jax
+    import jax.numpy as jnp
+    from jax import jit, vmap
+    from tensorflow_probability.substrates import jax as tfp
+    jax_available = True
+    print("JAX and Tensorflow Probability available. JAX solver will work, if requested.")
+
+except ImportError:
+    jax_available = False
+    print("JAX or Tensorflow Probability not available. JAX solver will not work.")
+
 warnings.filterwarnings("ignore")
 
 class als_fitter:
@@ -24,7 +36,7 @@ class als_fitter:
                  brange=[1,30], zrange=None, Nrangefill=[11.5,16], brangefill=[1,30], wrangefill=None, coldef=['Wave', 'Flux', 'Err'], \
                  Gpriors=None, Asymmlike=False, debug=False):
         
-        """ Class for dealing with MultiNest fitting
+        """ Class for dealing with the fitting
         if provided, specfile should be the *full path* to the spectrum
         """
                 
@@ -53,7 +65,6 @@ class als_fitter:
            self.freespecres = False
 
         #constants
-        self.small_num = 1e-70
         self.clight  = 2.9979245e5 #km/s
         self.ccgs = 2.9979245e10 #cm/s
         
@@ -139,16 +150,7 @@ class als_fitter:
             print('Zrange keyword not understood. Aborting.')
             return 0
           self.z_lims.append(np.array((zmin, zmax)))
-        
-       
-        #if zrange is not None:
-        #  self.z_lims = zrange
-        #else:
-        #  #If fitting multiplets the z range spans the spectrum where the first line is expected
-        #  self.zmin = ((self.fitrange[0][0]+0.25)/self.linepars[0]['wrest'].value)-1.
-        #  self.zmax = ((self.fitrange[0][1]-0.25)/self.linepars[0]['wrest'].value)-1.
-        #  self.z_lims = np.array((self.zmin, self.zmax))
-        
+
         #For fillers they can be anywhere unless wrangefill is set
         self.z_lims_fill = []
         for zz in range(self.nfill):
@@ -198,25 +200,21 @@ class als_fitter:
           self.bounds.append(self.z_lims_fill[ii])
           self.bounds.append(self.b_lims_fill)
         
-        self.ndim = len(self.bounds) 
-        
-        if debug:
-           print('Init completed') 
+        self.ndim = len(self.bounds)
                           
     def _scale_cube_pc(self, cube):
-        
+
         cube2 = np.copy(cube)
         for ii in range(len(cube)):
-            cube2[ii] = cube2[ii]*self.bounds[ii].ptp() + np.min(self.bounds[ii])
+            cube2[ii] = cube2[ii]*np.ptp(self.bounds[ii]) + np.min(self.bounds[ii])
             if ii == self.startind:
                cube2[ii] = int(cube2[ii])
-
         return cube2
 
     def _scale_cube_mn(self, cube, ndim, nparam):
         
         for ii in range(ndim):
-            cube[ii] = cube[ii]*self.bounds[ii].ptp() + np.min(self.bounds[ii])
+            cube[ii] = cube[ii]*np.ptp(self.bounds[ii]) + np.min(self.bounds[ii])
         
         return cube
         
@@ -255,14 +253,14 @@ class als_fitter:
     def lnlhood_pc(self, p):
         
         zind = 1+(1+self.startind)+np.arange(self.ncompmax)*3
-                
+
         #if self.ncompmax<10:
         #if not all(p[zind] == np.sort(p[zind])):
         #    return -np.inf, []
         
         lhood =  self.lnlhood_worker(p)
-        if self.debug:
-           print(lhood)
+        #if self.debug:
+        #   print(lhood)
         
         return lhood, []
     
@@ -293,7 +291,7 @@ class als_fitter:
 
         #reconstruct the spectrum first    
         model_spec = self.reconstruct_spec(p)
-        
+
         ispec2 = 1./((self.obj_noise)**2)
 
         spec_lhood = -0.5*np.nansum((ispec2*(self.obj-model_spec)**2 - np.log(ispec2) + np.log(2.*np.pi)))
@@ -417,7 +415,9 @@ class als_fitter:
         if self.freespecres:
            specresolution = p[0]
         else:
-           specresolution = self.specres   
+           specresolution = self.specres
+           if isinstance(specresolution, list) or isinstance(specresolution, np.ndarray):
+               specresolution = float(max(specresolution))
         
         if self.freecont:
            if self.freespecres:
@@ -459,16 +459,14 @@ class als_fitter:
         # sqrt(2*ln(100))*sigma, so number of pixels to include from
         # centre of gaussian is:
         n = np.ceil(3.0348 * sigma)
-        x_size = int(2*n) + 1 
+        x_size = int(2*n) + 1
         #return scipy_convolve(spec, Gaussian1DKernel(sigma, x_size=x_size),
         #                mode='same', method='direct')
 
         return convolve(spec, Gaussian1DKernel(sigma, x_size=x_size),
                         boundary='wrap', normalize_kernel=True)
     
-    
-    
-    
+
     def calc_w(self, p, lineid=0):
         
         #Calculate rest frame equivalent width of the 
@@ -521,6 +519,183 @@ class als_fitter:
             return -np.inf
 
         return lh + lp
+
+    
+    def get_jax_likelihood(self):
+
+        if not jax_available:
+            raise ImportError("JAX is not available.")
+        else:
+            from mcalf.routines import voigt_jax
+
+        # Prepare constants
+        obj_wl = jnp.array(self.obj_wl, dtype=jnp.float32)
+        obj = jnp.array(self.obj, dtype=jnp.float32)
+        obj_noise = jnp.array(self.obj_noise, dtype=jnp.float32)
+        
+        # Line parameters to arrays
+        line_wrest = jnp.array([l['wrest'].value for l in self.linepars], dtype=jnp.float32)
+        line_f = jnp.array([l['f'] for l in self.linepars], dtype=jnp.float32)
+        line_gamma = jnp.array([l['gamma'].value for l in self.linepars], dtype=jnp.float32)
+        
+        # Fill line parameters
+        fill_wrest = self.linefill['wrest'].value
+        fill_f = self.linefill['f']
+        fill_gamma = self.linefill['gamma'].value
+        
+        # Constants
+        ccgs = self.ccgs
+        velstep = self.velstep
+        clight = self.clight
+        
+        # Determine max kernel size for convolution if specres is free
+        if self.freespecres:
+             max_res = self.res_lims[1]
+        else:
+             max_res = self.specres
+             if isinstance(max_res, (list, tuple, np.ndarray)):
+                 max_res = np.max(max_res)
+             max_res = float(max_res)
+
+        sigma_max = (max_res / 2.354820) / velstep
+        n_max = jnp.ceil((3.0348 * sigma_max).astype(jnp.float32))
+        half_size = int(n_max)
+        kernel_x = jnp.arange(-half_size, half_size + 1)
+        
+        # Configuration flags
+        startind = self.startind
+        endind = self.endind
+        ncompmax = self.ncompmax
+        nfill = self.nfill
+        numlines = self.numlines
+        
+        freespecres = self.freespecres
+        freecont = self.freecont
+        contval = float(self.contval[0]) # Assuming scalar if fixed
+        fixed_specres = float(self.specres[0]) if not freespecres else 0.0
+        
+        # JAX Functions
+        @jit
+        def _jax_voigt_tau(wave, N, z, b, wrest, f, gamma):
+             # wave in Angstroms, others in cgs/standard
+
+             cold = 10.0**N
+             zp1 = z + 1.0
+
+             w_cm = wave / 1e8
+             wrest_cm = wrest / 1e8
+             
+             nujk = ccgs / wrest_cm
+             dnu = (b * 1e5) / wrest_cm # b is km/s, *1e5 -> cm/s
+             
+             avoigt = gamma / (4 * jnp.pi * dnu)
+             uvoigt = ((ccgs / (w_cm / zp1)) - nujk) / dnu
+             
+             cne = 0.014971475 * cold * f
+
+             # hjert expects scalar inputs, so we vmap over uvoigt (array) and avoigt (scalar)
+             # map arg 0, broadcast arg 1
+             v = vmap(voigt_jax.hjert, (0, None))(uvoigt, avoigt)
+
+             tau = cne * v / dnu
+             return tau
+        
+        @jit
+        def _jax_reconstruct_spec(p):
+            # Parse parameters
+            if freespecres:
+                specresolution = p[0]
+            else:
+                specresolution = fixed_specres
+                
+            if freecont:
+                if freespecres:
+                    continuum = p[1]
+                else:
+                    continuum = p[0]
+            else:
+                continuum = contval
+                
+            thisncomp =  jnp.floor(p[startind]).astype(jnp.int32)
+            
+            # Start with continuum
+            # specmodel = jnp.ones_like(obj_wl) # Start as 1.0
+            
+            # We need to calculate tau for all components and sum/multiply
+            # Since specmodel *= voigt, and voigt = exp(-tau)
+            # specmodel = exp(-sum(tau))
+            
+            total_tau = jnp.zeros_like(obj_wl)
+            
+            # Target components
+            def body_fun(i, current_tau):
+                # Check if i < thisncomp
+                is_active = i < thisncomp
+                
+                # Extract params
+                # 1 + 3*i + startind
+                idx = 1 + 3*i + startind
+                _N = p[idx]
+                _z = p[idx+1]
+                _b = p[idx+2]
+                
+                # Loop over lines
+                def line_body(j, val):
+                     t = _jax_voigt_tau(obj_wl, _N, _z, _b, line_wrest[j], line_f[j], line_gamma[j])
+                     return (val + t).astype(jnp.float32)
+                
+                comp_tau = jax.lax.fori_loop(0, numlines, line_body, jnp.zeros_like(obj_wl))
+                
+                # Apply mask
+                return current_tau + jnp.where(is_active, comp_tau, 0.0)
+
+            total_tau = jax.lax.fori_loop(0, ncompmax, body_fun, total_tau)
+            
+            # Fill components
+            def fill_body(i, current_tau):
+                idx = 3*i + endind # Fill params start at endind
+                _N = p[idx]
+                _z = p[idx+1]
+                _b = p[idx+2]
+                
+                t = _jax_voigt_tau(obj_wl, _N, _z, _b, fill_wrest, fill_f, fill_gamma)
+                return (current_tau + t).astype(jnp.float32)
+                
+            total_tau = jax.lax.fori_loop(0, nfill, fill_body, total_tau)
+            
+            specmodel = jnp.exp(-total_tau)
+
+            # Convolution
+            #Construct kernel
+            sigma = (specresolution / 2.354820) / velstep
+            # Use fixed grid kernel_x
+            kernel = jnp.exp(-kernel_x**2 / (2 * sigma**2))
+            kernel = kernel / jnp.sum(kernel) # Normalize
+            
+            # Convolve
+            # mode='same' equivalent
+            specmodel_conv = jnp.convolve(specmodel, kernel, mode='same')
+
+            # Reset edges to continuum (unconvolved model) to avoid convolution artifacts
+            n_pix = specmodel.shape[0]
+            idx_arr = jnp.arange(n_pix)
+            # Use half_size from outer scope
+            edge_mask = (idx_arr < half_size) | (idx_arr >= n_pix - half_size)
+            specmodel_conv = jnp.where(edge_mask, specmodel, specmodel_conv)
+            
+            return specmodel_conv * continuum
+            
+        @jit
+        def _jax_loglikelihood(p):
+             model_spec = _jax_reconstruct_spec(p)
+             ispec2 = 1.0 / (obj_noise**2)
+             
+             chi2 = ispec2 * (obj - model_spec)**2
+
+             ll = -0.5 * jnp.nansum(chi2 + -jnp.log(ispec2) + jnp.log(2.0 * jnp.pi))
+             return ll
+
+        return _jax_loglikelihood
 
     def __enter__(self):
         return self
@@ -616,12 +791,12 @@ def readconfig(configfile=None, logger=None):
     if not input_params.has_option('input', 'linelist'):
         raise configparser.NoOptionError("input", "linelist")
     else:
-        linelist = input_params.get('input', 'linelist').split(',')
+        linelist = [x.strip() for x in input_params.get('input', 'linelist').split(',')]
         
     if not input_params.has_option('input', 'coldef'):
         coldef = ['Wave', 'Flux', 'Err']
     else:
-        coldef = input_params.get('input', 'coldef').split(',') 
+        coldef = [x.strip() for x in input_params.get('input', 'coldef').split(',')] 
     
     if input_params.has_option('input', 'specres'):
        specres =  np.array(input_params.get('input', 'specres').split(','), dtype=float)
@@ -636,8 +811,8 @@ def readconfig(configfile=None, logger=None):
     if input_params.has_option('input', 'solver'):
         solver = input_params.get('input', 'solver')
     else:
-        solver = 'polychord'    
-    
+        solver = 'polychord'
+
     #Paths are desirable but not essential, default to cwd
     if not input_params.has_option('pathing', 'datadir'):
        datadir = './'
@@ -730,55 +905,70 @@ def readconfig(configfile=None, logger=None):
        doplot = booldir[input_params.get('run', 'doplot')]
     else:
        doplot = True
-       
-       
 
-    run_params = {'specfile'  : datadir+input_params.get('input', 'specfile'),
-                  'wavefit'   : wavefit,
-                  'linelist'  : linelist,
-                  'coldef'    : coldef,
-                  'asymmlike' : asymmlike,
-                  'solver'    : solver,
-                  'specres'   : specres,
-                  'chaindir'  : chaindir,
-                  'plotdir'   : plotdir,
-                  'chainfmt'  : chainfmt,
-                  'ncomp'     : ncomp,
-                  'nfill'     : nfill,
-                  'Nrange'    : Nrange,
-                  'brange'    : brange,
-                  'zrange'    : zrange,
-                  'Nrangefill': Nrangefill,
-                  'brangefill': brangefill,
-                  'wrangefill': wrangefill,
-                  'contval'   : contval,
-                  'nmaxcols'  : nmaxcols,
-                  'yrange'    : yrange,
-                  'dofit'     : dofit,
-                  'doplot'    : doplot}
+    if input_params.has_option('run', 'showprogress'):
+        showprogress = booldir[input_params.get('run', 'showprogress')]
+    else:
+        showprogress = False
+
+    run_params = {'specfile'   : datadir+input_params.get('input', 'specfile'),
+                  'wavefit'    : wavefit,
+                  'linelist'   : linelist,
+                  'coldef'     : coldef,
+                  'asymmlike'  : asymmlike,
+                  'solver'     : solver,
+                  'specres'    : specres,
+                  'chaindir'   : chaindir,
+                  'plotdir'    : plotdir,
+                  'chainfmt'   : chainfmt,
+                  'ncomp'      : ncomp,
+                  'nfill'      : nfill,
+                  'Nrange'     : Nrange,
+                  'brange'     : brange,
+                  'zrange'     : zrange,
+                  'Nrangefill' : Nrangefill,
+                  'brangefill' : brangefill,
+                  'wrangefill' : wrangefill,
+                  'contval'    : contval,
+                  'nmaxcols'   : nmaxcols,
+                  'yrange'     : yrange,
+                  'dofit'      : dofit,
+                  'doplot'     : doplot,
+                  'showprogress': showprogress}
                   
-    if input_params.has_section('mnsettings'):
+    if input_params.has_section('mn_settings'):
     
-       settingsdict = (dict((opt, booldir[input_params.get('mnsettings',opt)]) 
-                 if input_params.get('mnsettings',opt) in ['True','False'] 
-                 else (opt, input_params.get('mnsettings', opt)) 
-                 for opt in input_params.options('mnsettings')))
+       settingsdict = (dict((opt, booldir[input_params.get('mn_settings',opt)])
+                 if input_params.get('mn_settings',opt) in ['True','False']
+                 else (opt, input_params.get('mn_settings', opt))
+                 for opt in input_params.options('mn_settings')))
     
-       run_params['mnsettings'] = settingsdict
+       run_params['mn_settings'] = settingsdict
 
 
-    if input_params.has_section('pcsettings'):
+    if input_params.has_section('pc_settings'):
     
-       settingsdict = (dict((opt, booldir[input_params.get('pcsettings',opt)]) 
-                 if input_params.get('pcsettings',opt) in ['True','False'] 
-                 else (opt, input_params.get('pcsettings', opt)) 
-                 for opt in input_params.options('pcsettings')))
+       settingsdict = (dict((opt, booldir[input_params.get('pc_settings',opt)]) 
+                 if input_params.get('pc_settings',opt) in ['True','False'] 
+                 else (opt, input_params.get('pc_settings', opt)) 
+                 for opt in input_params.options('pc_settings')))
     
-       run_params['pcsettings'] = settingsdict
+       run_params['pc_settings'] = settingsdict
+
+    if input_params.has_section('jaxns_settings'):
+        settingsdict = (dict((opt, booldir[input_params.get('jaxns_settings',opt)]) 
+                  if input_params.get('jaxns_settings',opt) in ['True','False'] 
+                  else (opt, input_params.get('jaxns_settings', opt)) 
+                  for opt in input_params.options('jaxns_settings')))
+        run_params['jaxns_settings'] = settingsdict
+
+    if input_params.has_option('run', 'device'):
+        run_params['device'] = input_params.get('run', 'device')
+    else:
+        run_params['device'] = 'cpu'
                   
     
 
     return run_params
 
-#b /cosma/home/durham/dc-foss1/.local/lib/python3.7/site-packages/mc_alf-0.99-py3.7.egg/mcalf/routines/hires_fitter.py:558
 

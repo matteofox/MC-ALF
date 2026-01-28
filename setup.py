@@ -5,14 +5,10 @@ from os.path import join as pjoin
 import shutil
 import glob
 
-try:
-    from setuptools import setup, Extension, Command
-    from setuptools.command.build_ext import build_ext as _build_ext
-    from setuptools.command.build import build
-except ImportError:
-    from distutils.core import setup, Extension, Command
-    from distutils.command.build_ext import build_ext as _build_ext
-    from distutils.command.build import build
+from setuptools import setup, Extension, Command
+from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.command.build import build
+
 
 class CleanCommand(Command):
     """Custom distutils command to clean the .so and .pyc files."""
@@ -24,18 +20,6 @@ class CleanCommand(Command):
         self._clean_me = []
         self._clean_trees = []
         self._clean_exclude = []
-
-        for root, dirs, files in list(os.walk('pyspark')):
-            for f in files:
-                if f in self._clean_exclude:
-                    continue
-                if os.path.splitext(f)[-1] in ('.pyc', '.so', '.o',
-                                               '.pyo',
-                                               '.pyd', '.c', '.orig'):
-                    self._clean_me.append(pjoin(root, f))
-            for d in dirs:
-                if d == '__pycache__':
-                    self._clean_trees.append(pjoin(root, d))
 
         for d in ('build', 'dist', ):
             if os.path.exists(d):
@@ -58,14 +42,11 @@ class CleanCommand(Command):
                 pass
 
 
-       
-
 if __name__ == "__main__":
 
     include_dirs = ["include",
                     numpy.get_include(),
                    ]
-
 
     if sys.version_info[0] < 3:
       raise Exception("This codes requires Python3")
@@ -73,13 +54,6 @@ if __name__ == "__main__":
     scripts = ['scripts/mc-alf']  
     
     cmdclass = {'clean': CleanCommand}
-    
-    
-    try:
-      import pypolychord
-    except:
-      print("Python bindings for PolyChordLite must be installed before mc-alf can be installed.")  
-      exit()
       
     with open('mcalf/_version.py') as f:
         exec(f.read())
@@ -89,7 +63,7 @@ if __name__ == "__main__":
         url="https://github.com/matteofox/mc-alf",
         version= __version__,
         author="Matteo Fossati",
-        author_email="matteo.fossati@durham.ac.uk",
+        author_email="matteo.fossati@unimib.it",
         cmdclass = cmdclass,
         scripts = scripts, 
         packages=["mcalf",

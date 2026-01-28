@@ -1,14 +1,39 @@
 #!/usr/bin/env python3
-
-from __future__ import print_function
-   
 import numpy as np
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
-import glob, os, shutil, warnings
+import glob, os, shutil, warnings, sys
 import string, gc, time, copy
 import argparse, datetime
 import matplotlib.pyplot as pl
+import contextlib
+
+@contextlib.contextmanager
+def suppress_output():
+    # Open /dev/null
+    with open(os.devnull, "w") as devnull:
+        # Save old stdout/stderr
+        old_stdout = os.dup(1)
+        old_stderr = os.dup(2)
+        try:
+            # Flush existing python buffers
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
+            # Redirect
+            os.dup2(devnull.fileno(), 1)
+            os.dup2(devnull.fileno(), 2)
+            
+            yield
+        finally:
+            # Restore
+            os.dup2(old_stdout, 1)
+            os.dup2(old_stderr, 2)
+            # Close saved fds
+            os.close(old_stdout)
+            os.close(old_stderr)
+
+
 try:
   from mpi4py import MPI
   mpi=1
@@ -17,7 +42,8 @@ except:
 
 from mcalf.routines import hires_fitter as fitter
 
-pl.rc('text', usetex=True)
+
+pl.rc('text', usetex=False)
 pl.rcParams['font.size'] = 20
 
 parser = argparse.ArgumentParser()
@@ -28,7 +54,9 @@ args = parser.parse_args()
 configpars = fitter.readconfig(args.config)
 
 if args.debug:
-   print('DEBUG mode, increased verbosity')
+   print('--- DEBUG mode, increased verbosity ---')
+if args.debug:
+    print('[DEBUG]: hires_fitter loaded from {}'.format(fitter.__file__))
 
 #Create directories if necessary
 if not os.path.isdir(configpars['chaindir']):
@@ -53,28 +81,33 @@ if configpars['dofit']:
               settings = PolyChordSettings(temp.ndim, 0)
               settings.file_root = configpars['chainfmt'].format(configpars['nfill'])
               settings.base_dir = configpars['chaindir']
-           
-              if 'pcsettings' in configpars:
-                 configsettings = configpars['pcsettings']
-                 settings.nlive         = int(configsettings['nlive'])
-                 settings.num_repeats   = int(configsettings['num_repeats'])
-                 settings.precision_criterion = float(configsettings['precision_criterion'])
-                 settings.feedback      = int(configsettings['feedback'])
-                 settings.do_clustering = configsettings['do_clustering']
-                 settings.equals        = configsettings['equals']
-                 settings.read_resume   = configsettings['read_resume']
-                 settings.write_resume  = configsettings['write_resume']
-                 settings.write_live    = configsettings['write_live']
-                 settings.write_dead    = configsettings['write_dead']
-                 settings.write_prior   = configsettings['write_prior']
-                 settings.posteriors    = configsettings['posteriors']
-                 settings.cluster_posteriors = configsettings['cluster_posteriors']
-           
+              settings.feedback = 0
+              if 'pc_settings' in configpars:
+                 configsettings = configpars['pc_settings']
+                 settings.nlive         = int(configsettings.get('nlive', 100))
+                 settings.num_repeats   = int(configsettings.get('num_repeats', 20))
+                 settings.precision_criterion = float(configsettings.get('precision_criterion', 1e-3))
+                 settings.feedback      = int(configsettings.get('feedback', 1)) 
+                 settings.do_clustering = configsettings.get('do_clustering', True)
+                 settings.equals        = configsettings.get('equals', True)
+                 settings.read_resume   = configsettings.get('read_resume', True)
+                 settings.write_resume  = configsettings.get('write_resume', True)
+                 settings.write_live    = configsettings.get('write_live', True)
+                 settings.write_dead    = configsettings.get('write_dead', True)
+                 settings.write_prior   = configsettings.get('write_prior', True)
+                 settings.posteriors    = configsettings.get('posteriors', True)
+                 settings.cluster_posteriors = configsettings.get('cluster_posteriors', True)
+
               # Run PolyChord
-              
               print('Running polychord')
               t0 = datetime.datetime.now()
-              output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+
+              if configpars['showprogress']:
+                  output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+              else:
+                  with suppress_output():
+                      output = pypolychord.run_polychord(temp.lnlhood_pc, temp.ndim, 0, settings, temp._scale_cube_pc)
+
               t1 = datetime.datetime.now()
               if mpi==1:
                 if MPI.COMM_WORLD.rank==0:
@@ -82,7 +115,7 @@ if configpars['dofit']:
               else:
                  print('Execution time {}'.format(t1-t0))
            
-           elif configpars['solver'] == 'dypolychord':
+           elif configpars['solver'] == 'dypolychord': #Never deeply tested
                
                import dyPolyChord.pypolychord_utils
                import dyPolyChord
@@ -121,7 +154,7 @@ if configpars['dofit']:
                                            comm=MPI.COMM_WORLD)
                
              
-           elif configpars['solver'] == 'multinest':
+           elif configpars['solver'] == 'multinest': #Too slow with tens of parameters
               
               import pymultinest
               
@@ -168,8 +201,127 @@ if configpars['dofit']:
                
                np.savetxt(out_fmt+'equal_weights.txt', samples_equal)               
                
+           elif configpars['solver'] == 'jaxns':
+               try:
+
+                   os.environ['JAX_PLATFORMS'] = 'cuda,cpu'
+
+                   import jax
+
+                   if configpars['device'] == 'cpu':
+                      jax.config.update("jax_platform_name", "cpu")
+
+                   jax.config.update("jax_enable_x64", False)
+                   import jax.numpy as jnp
+
+                   from jaxns import NestedSampler, Model, Prior
+                   import jaxns.internals.mixed_precision as jmp
+                   jmp.mp_policy = jmp.Policy(count_dtype=jnp.int32, index_dtype=jnp.int32, measure_dtype=jnp.float32)
+
+                   from tensorflow_probability.substrates import jax as tfp
+                   from jaxns.utils import resample
+
+               except ImportError:
+                   raise ImportError("jaxns is required for the jaxns solver. Please install it.")
+
+               print('Running jaxns on {}'.format(configpars['device']))
+               
+               # Configure device as requested
+
+               
+               # Get Likelihood
+               log_likelihood = temp.get_jax_likelihood()
+               
+               # constant bounds
+               bounds_list = temp.bounds
+               # Flatten/stacked bounds
+               # bounds is a list of (min, max)
+               lowers = np.array([b[0] for b in bounds_list])
+               uppers = np.array([b[1] for b in bounds_list])
+               ptps = uppers - lowers
+               
+               lowers_j = jnp.array(lowers, dtype=jnp.float32)
+               uppers_j = jnp.array(uppers, dtype=jnp.float32)
+               
+               def prior_model():
+                   p = yield Prior(tfp.distributions.Uniform(low=lowers_j, high=uppers_j), name='p')
+                   return p
+               
+               # JAXNS Model Force the Model creation to happen on CPU memory
+               with jax.default_device(jax.devices("cpu")[0]):
+                   model = Model(prior_model=prior_model, log_likelihood=log_likelihood)
+               
+               # Settings
+               settings_dict = {'max_samples': 1e5, 'num_live_points': 500} # Defaults
+               if 'jaxns_settings' in configpars:
+                   # Map settings
+                   if 'max_samples' in configpars['jaxns_settings']:
+                       settings_dict['max_samples'] = float(configpars['jaxns_settings']['max_samples'])
+                   if 'num_live_points' in configpars['jaxns_settings']:
+                       settings_dict['num_live_points'] = int(configpars['jaxns_settings']['num_live_points'])
+               
+               max_samples = int(settings_dict['max_samples'])
+               num_lives = int(settings_dict['num_live_points'])
+               if args.debug:
+                   print(f"[DEBUG]: Initializing NestedSampler with max_samples={max_samples}, num_live_points={num_lives}")
+               
+               # Nested sampler
+               ns = NestedSampler(model=model, max_samples=max_samples, num_live_points=num_lives)
+
+               #Actual run here
+               t0 = datetime.datetime.now()
+               # Use seed 43 to refresh
+               termination_reason, state = ns(key=jax.random.PRNGKey(jnp.int32(43)))
+               t1 = datetime.datetime.now()
+               print('[INFO] JAXNS Execution time {}'.format(t1-t0))
+
+               # Extract results
+               results = ns.to_results(state=state, termination_reason=termination_reason)
+
+               if args.debug:
+                  print(ns.summary(results))
+
+               #ns.plot_diagnostics(results)
+               #ns.plot_cornerplot(results)
+
+               # Save stats
+               stats_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '.stats'
+               with open(stats_file, 'w') as f:
+                   f.write('log(Z)   : {}   +/-   {}\n'.format(float(results.log_Z_mean), float(results.log_Z_uncert)))
+
+               # Resample to equal weights
+               key = jax.random.PRNGKey(jnp.int32(42))
+               
+               samples_dict = results.samples
+               log_weights = results.log_dp_mean 
+               
+               if 'p' in samples_dict:
+                   samples_raw = samples_dict['p']
+               else:
+                   samples_raw = list(samples_dict.values())[0] 
+
+               # Resample samples and logL
+               # We resample with replacement to get equal weights
+               S_resample = int(settings_dict.get('max_samples', 1000))
+               samples_equal = resample(key=key, samples=samples_raw, log_weights=log_weights, S=S_resample, replace=True)
+               log_L_equal = resample(key=key, samples=results.log_L_samples, log_weights=log_weights, S=S_resample, replace=True)
+               
+               # Construct output matrix for pc_analyzer
+               # [weight, -2*logL, p1, p2, ...]
+               N_samples = samples_equal.shape[0]
+               weights_col = np.ones((N_samples, 1))
+               
+               # pc_analyzer expects col 1 to be -2*ln(L)
+               logL_col = -2.0 * log_L_equal.reshape(-1, 1)
+               samples_out = samples_equal.reshape(N_samples, -1)
+               output_matrix = np.hstack([weights_col, logL_col, samples_out])
+               
+               chain_file = configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '_equal_weights.txt'
+               np.savetxt(chain_file, output_matrix)
+               print(f"Saved JAXNS results to {chain_file}")
+
            else:
-                 print('Requested solver {} not implemented'.format(solver))
+               print('Requested solver {} not implemented'.format(configpars['solver']))
 
 if configpars['doplot']:
      
@@ -186,7 +338,7 @@ if configpars['doplot']:
                                  debug=args.debug) as temp:
                           
               lnz, dlnz, lhoodval, values = fitter.pc_analyzer(configpars['chaindir']+configpars['chainfmt'].format(temp.nfill), return_sorted=True)
-              
+
               #Define parameter names
               parameters = fitter.get_parnames(temp.ncompmax+temp.nfill, temp.freecont)
         
@@ -200,13 +352,14 @@ if configpars['doplot']:
                    continuum = meds[0]  
               else:
                  continuum = temp.contval 
-              
+
+              #specresolution needs to be a scalar not an array, even if 1 dimensional
               if len(temp.specres)>1:
                  specresolution = meds[0]
               else:
-                 specresolution = temp.specres   
+                 specresolution = temp.specres[0]
               
-              ncomp_arr, ncomp_counts = np.unique(values[:,temp.startind], return_counts=True)
+              ncomp_arr, ncomp_counts = np.unique(np.floor(values[:,temp.startind]).astype(int), return_counts=True)
               ncomp_counts = 1.*ncomp_counts/np.sum(ncomp_counts)
               
               #Calc median likelihood across posterior
@@ -262,7 +415,7 @@ if configpars['doplot']:
                 for i in range(temp.ncompmax+temp.nfill):
                     
                     _N, _z, _b = meds[1+3*i+temp.startind+np.arange(3)]
-                    
+
                     if _z<10 and i<=map_ncomp:
                        color = 'dodgerblue'
                        spec1 = temp.reconstruct_onecomp(specresolution, continuum, _N, _z, _b)
