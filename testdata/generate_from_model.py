@@ -4,11 +4,15 @@ from mcalf.routines import hires_fitter
 import sys
 
 def main():
-    # Model Parameters
-    z_true = [3.0,3.001,3.0005,3.002]
-    N_true = [13.8,13.5,13.2,13.4]
-    b_true = [20.0,25.0,15.0,30.0]
-    
+    # Model Parameters for a moderately complex model
+    z_true = [3.0,3.001,3.0005,3.0015,3.0025,3.0035]
+    N_true = [13.8,13.5,13.2,13.4,14.0,14.2]
+    b_true = [20.0,25.0,15.0,30.0,25.0,15.0]
+    # Model Parameters for a highly complex model
+    z_true = [2.999,2.9995,3.0, 3.001, 3.0005, 3.0015, 3.002, 3.0025, 3.0035, 3.0039]
+    N_true = [13.6,13.0,13.8, 13.6, 13.2, 13.4, 13.5, 14.0, 14.2, 13.7]
+    b_true = [17.5,8.0, 20.0, 25.0, 15.0, 30.0, 10.0, 25.0, 15.0, 20.0]
+
     # Grid/Config from existing file
     specfile = 'civ_mock_spec.txt'
     fitlines = ['CIV 1548', 'CIV 1550']
@@ -67,14 +71,12 @@ def main():
         plt.plot(wave, flux_model, 'r-', lw=1.5, label='True Model (MC-ALF)')
         plt.xlabel('Wavelength (A)')
         plt.ylabel('Normalized Flux')
-        plt.title(f'MC-ALF Generated Mock: z={z_true}, logN={N_true}, b={b_true}, FWHM={specres[0]}', fontsize=8)
+        plt.title(f'MC-ALF Generated Mock (FWHM={specres[0]}): \n z={z_true}, \n logN={N_true}, \n b={b_true}', fontsize=8)
         plt.legend()
         plt.grid(True, alpha=0.3)
-        plt.savefig('civ_mock_spec_multicomp.png')
+        plt.savefig('civ_mock_spec_multicomp.png', dpi=200)
         print("Saved plot to civ_mock_spec.png")
-        
-        # Debug Stats
-        print(f"Model Min Flux: {np.min(flux_model):.4f}")
+
 
 if __name__ == '__main__':
     main()
