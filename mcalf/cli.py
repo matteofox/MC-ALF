@@ -256,21 +256,23 @@ def main():
                        model = Model(prior_model=prior_model, log_likelihood=log_likelihood)
                    
                    # Settings
-                   settings_dict = {'max_samples': 1e5, 'num_live_points': 500} # Defaults
+                   settings_dict = {'max_samples': 1e5, 'num_live_points': 500, 'difficult_model': False} # Defaults
                    if 'jaxns_settings' in configpars:
                        # Map settings
                        if 'max_samples' in configpars['jaxns_settings']:
                            settings_dict['max_samples'] = float(configpars['jaxns_settings']['max_samples'])
                        if 'num_live_points' in configpars['jaxns_settings']:
                            settings_dict['num_live_points'] = int(configpars['jaxns_settings']['num_live_points'])
-                   
+                       if 'difficult_model' in configpars['jaxns_settings']:
+                           settings_dict['difficult_model'] = bool(configpars['jaxns_settings']['difficult_model'])
+                           
                    max_samples = int(settings_dict['max_samples'])
                    num_lives = int(settings_dict['num_live_points'])
                    if args.debug:
-                       print(f"[DEBUG]: Initializing NestedSampler with max_samples={max_samples}, num_live_points={num_lives}")
+                       print(f"[DEBUG]: Initializing NestedSampler with max_samples={max_samples}, num_live_points={num_lives}, difficult_model={settings_dict['difficult_model']}")
                    
                    # Nested sampler
-                   ns = NestedSampler(model=model, max_samples=max_samples, num_live_points=num_lives)
+                   ns = NestedSampler(model=model, max_samples=max_samples, num_live_points=num_lives, difficult_model=settings_dict['difficult_model'])
 
                    #Actual run here
                    t0 = datetime.datetime.now()
@@ -284,8 +286,7 @@ def main():
 
                    if args.debug:
                       print(ns.summary(results))
-
-                   #ns.plot_diagnostics(results)
+                      ns.plot_diagnostics(results, save_name=configpars['chaindir'] + configpars['chainfmt'].format(configpars['nfill']) + '.diagnostics.png')
                    #ns.plot_cornerplot(results)
 
                    # Save stats
