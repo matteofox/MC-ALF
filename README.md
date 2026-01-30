@@ -101,25 +101,53 @@ If `doplot = True`, PDF plots are generated in `plotdir` showing the spectrum, t
 
 ```ini
 [input]
-specfile = /path/to/spectrum.dat
-wavefit = 1213, 1218
-linelist = HI 1215
-
-[output]
-chaindir = ./chains/
-plotdir = ./plots/
-chainfmt = run1_{}
-
-[parameters]
-ncomp = (1, 1)
-dofit = True
-doplot = True
+specfile = testdata/civ_mock_spec_multicomp.txt
+wavefit = 6180,6220
+linelist = CIV 1548, CIV 1550
+coldef = Wave, Flux, Err
 solver = polychord
+specres = 8.0,9.0
+asymmlike = False
 
-[priors]
-nfill = 0
-contval = 1.0
-specres = 7.0
-Nrange = 12.0, 16.0
-brange = 10.0, 50.0
+[pathing]
+datadir = ./
+outdir = testdata/output/
+chainfmt = pc_fits_{0}
+chaindir = pc_fits/
+plotdir  = pc_plots/
+
+# ncomp can be a range, nfill is currently a fixed value
+# If not specified we assume one component and zero fillers
+[components]
+ncomp = 8,11
+contval  = 1
+Nrange = 12.0,14.5
+brange = 10.0, 40.0
+zrange = 2.99, 3.01
+Nrangefill = 11.5,16
+brangefill = 1,30
+
+[run]
+dofit = False
+doplot = True
+device = gpu 
+showprogress=True
+
+[jaxns_settings]
+max_samples = 20000
+num_live_points = 200
+
+[pc_settings]
+# this section controls detector level corrections.  Output files
+# are written to procdir with prefix prependend (defaults to dc)
+nlive = 150
+num_repeats = 25
+precision_criterion = 0.01
+feedback = 1
+do_clustering = False
+
+
+# Settings for the plots
+[plots]
+nmaxcols = 3
 ```

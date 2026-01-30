@@ -22,11 +22,8 @@ try:
     from jax import jit, vmap
     from tensorflow_probability.substrates import jax as tfp
     jax_available = True
-    print("JAX and Tensorflow Probability available. JAX solver will work, if requested.")
-
 except ImportError:
     jax_available = False
-    print("JAX or Tensorflow Probability not available. JAX solver will not work.")
 
 warnings.filterwarnings("ignore")
 

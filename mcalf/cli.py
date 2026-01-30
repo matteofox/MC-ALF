@@ -43,7 +43,6 @@ except:
 from mcalf.routines import hires_fitter as fitter
 from mcalf import __version__
 
-
 def main():
     pl.rc('text', usetex=False)
     pl.rcParams['font.size'] = 20
