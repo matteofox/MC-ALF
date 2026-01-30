@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mc-alf"
+dynamic = ["version"]
+authors = [
+  { name="Matteo Fossati", email="matteo.fossati@unimib.it" },
+]
+description = "Monte-Carlo Absorption Line Fitter"
+readme = "README.md"
+requires-python = ">=3.7"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy",
+    "matplotlib",
+    "mpi4py",
+    "linetools",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/matteofox/mc-alf"
+
+[project.scripts]
+mc-alf = "mcalf.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mcalf", "mcalf.*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "mcalf._version.__version__"}

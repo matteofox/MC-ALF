@@ -1,6 +1,0 @@
-numpy
-scipy
-astropy
-matplotlib
-mpi4py
-linetools
