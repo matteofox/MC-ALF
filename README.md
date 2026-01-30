@@ -138,16 +138,12 @@ max_samples = 20000
 num_live_points = 200
 
 [pc_settings]
-# this section controls detector level corrections.  Output files
-# are written to procdir with prefix prependend (defaults to dc)
 nlive = 150
 num_repeats = 25
 precision_criterion = 0.01
 feedback = 1
 do_clustering = False
 
-
-# Settings for the plots
 [plots]
 nmaxcols = 3
 ```
